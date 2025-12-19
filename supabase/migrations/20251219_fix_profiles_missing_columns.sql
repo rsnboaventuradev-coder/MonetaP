@@ -1,0 +1,2 @@
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS monthly_income NUMERIC;

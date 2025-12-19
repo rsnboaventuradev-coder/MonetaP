@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moneta - Controle Financeiro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="./assets/css/style.css">
+    <link rel="stylesheet" href="/src/assets/css/safe-area.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'brand-bg': '#090a11', // Deep rich dark
+                        'brand-surface': '#13141f', // Slightly lighter surface
+                        'brand-surface-light': '#1d1e2c', // Highlight
+                        'brand-green': '#059669', // Emerald 600
+                        'brand-green-light': '#34d399', // Emerald 400
+                        'brand-gold': '#d97706', // Amber 600
+                        'brand-gold-light': '#fbbf24', // Amber 400
+                        'brand-red': '#e11d48', // Rose 600
+                        'brand-red-light': '#fb7185', // Rose 400
+                    },
+                    boxShadow: {
+                        'glow-green': '0 0 20px -5px rgba(5, 150, 105, 0.3)',
+                        'glow-gold': '0 0 20px -5px rgba(217, 119, 6, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-brand-bg text-gray-200 antialiased h-full">
+
+    <div id="app-container" class="h-full flex flex-col">
+        <!-- Main content -->
+        <main id="main-content" class="h-full overflow-y-auto pb-20 flex-1"></main>
+
+        <!-- Bottom Nav for all screen sizes -->
+        <nav id="bottom-nav"></nav>
+    </div>
+
+    <!-- Container para Modais -->
+    <div id="modal-container"></div>
+
+    <!-- Bibliotecas Externas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+
+    <!-- Script Principal da Aplicação -->
+    <script type="module" src="/src/js/app.js"></script>
+</body>
+
+</html>

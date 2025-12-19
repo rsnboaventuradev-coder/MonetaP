@@ -1,0 +1,46 @@
+{
+  "name": "moneta-app",
+  "version": "1.0.0",
+  "description": "Aplicativo de Controle Financeiro",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "package": "npm run build && electron-builder",
+    "android:sync": "npm run build && npx cap sync android"
+  },
+  "keywords": [],
+  "author": "Seu Nome Aqui",
+  "license": "ISC",
+  "devDependencies": {
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/core": "^6.0.0",
+    "electron": "^31.0.1",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.2.13"
+  },
+  "build": {
+    "appId": "com.seu-nome.moneta",
+    "productName": "Moneta App",
+    "files": [
+      "dist/**/*",
+      "main.js"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/images/logo.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/images/logo.icns"
+    }
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.88.0"
+  }
+}

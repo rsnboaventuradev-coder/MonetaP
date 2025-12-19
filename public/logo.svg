@@ -1,0 +1,8 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+<style>
+    .gold { fill: #D4AF37; }
+    .dark_bg { fill: #0F0F12; }
+</style>
+<circle cx="128" cy="128" r="120" class="gold"/>
+<path d="M76 172 V 84 H 100 L 128 124 L 156 84 H 180 V 172 H 156 V 112 L 136 142 L 128 152 L 120 142 L 100 112 V 172 H 76 Z" class="dark_bg"/>
+</svg>
