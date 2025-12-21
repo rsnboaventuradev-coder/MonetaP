@@ -9,6 +9,9 @@ import { ReportsModule } from './modules/reports.js';
 import { InvestmentsModule } from './modules/investments.js';
 import { SettingsModule } from './modules/settings.js';
 import { OnboardingModule } from './modules/onboarding.js';
+import { Toast } from './utils/toast.js';
+
+window.Toast = Toast;
 
 class App {
     constructor() {
@@ -95,11 +98,30 @@ class App {
                 break;
         }
     }
+    togglePrivacy() {
+        this.state.isPrivacyOn = !this.state.isPrivacyOn;
+        localStorage.setItem('privacy_mode', this.state.isPrivacyOn);
+        if (this.state.isPrivacyOn) {
+            document.body.classList.add('privacy-active');
+            Toast.show('Modo Privacidade Ativado', 'info');
+        } else {
+            document.body.classList.remove('privacy-active');
+            Toast.show('Modo Privacidade Desativado', 'info');
+        }
+    }
 }
 
 const app = new App();
+const existingCtx = window.app || {};
 window.app = app;
+Object.assign(window.app, existingCtx);
 
 document.addEventListener('DOMContentLoaded', () => {
     app.init();
+
+    // Privacy Init
+    if (localStorage.getItem('privacy_mode') === 'true') {
+        app.state.isPrivacyOn = true;
+        document.body.classList.add('privacy-active');
+    }
 });

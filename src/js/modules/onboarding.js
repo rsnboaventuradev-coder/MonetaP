@@ -83,7 +83,7 @@ export const OnboardingModule = {
             validate: () => {
                 const income = document.getElementById('onb-income').value;
                 const cost = document.getElementById('onb-cost').value;
-                if (!income || !cost) { alert('Preencha os valores para continuar.'); return false; }
+                if (!income || !cost) { Toast.show('Preencha os valores para continuar.', 'warning'); return false; }
                 window.app.onbData.monthly_income = parseFloat(income);
                 window.app.onbData.cost_of_living = parseFloat(cost);
                 return true;
@@ -227,7 +227,7 @@ export const OnboardingModule = {
 
         } catch (e) {
             console.error(e);
-            alert('Erro ao salvar: ' + e.message);
+            Toast.show('Erro ao salvar: ' + e.message, 'error');
         }
     }
 };

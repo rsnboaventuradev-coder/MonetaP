@@ -1,10 +1,63 @@
-import { SupabaseService } from '../services/supabase.service.js';
+import { supabase } from '../services/supabase.service.js';
 
+// Logic & State Management
+export const AuthService = {
+    user: null,
+
+    async init() {
+        supabase.auth.onAuthStateChange((event, session) => {
+            this.user = session?.user || null;
+        });
+    },
+
+    async getCurrentUser() {
+        if (this.user) return this.user;
+        const { data: { session } } = await supabase.auth.getSession();
+        this.user = session?.user || null;
+        return this.user;
+    },
+
+    async login(email, password) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        return data;
+    },
+
+    async register(email, password, fullName) {
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: { data: { full_name: fullName } }
+        });
+        if (error) throw error;
+        // 2. Cria perfil público (se necessário, ou usar trigger no banco)
+        // ... lógica de perfil ...
+        Toast.show('Conta criada com sucesso! Verifique seu email.', 'success');
+        window.location.href = '/index.html';
+        return data;
+    },
+
+    async logout() {
+        await supabase.auth.signOut();
+        window.location.href = '/index.html';
+    },
+
+    async resetPassword(email) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin,
+        });
+        if (error) throw error;
+    }
+};
+
+// UI Rendering & Interaction
 export const AuthModule = {
     isRegistering: false,
 
     render() {
         const container = document.getElementById('main-content');
+        if (!container) return;
+
         const title = this.isRegistering ? 'Criar nova conta' : 'Bem-vindo de volta';
         const subtitle = this.isRegistering ? 'Comece sua jornada financeira hoje.' : 'Acesse suas finanças de qualquer lugar.';
         const btnText = this.isRegistering ? 'Cadastrar' : 'Entrar';
@@ -31,6 +84,16 @@ export const AuthModule = {
 
                     <div class="bg-brand-surface/50 backdrop-blur-xl border border-white/5 rounded-3xl p-8 shadow-2xl">
                         <form class="space-y-6" id="auth-form">
+                            ${this.isRegistering ? `
+                            <div>
+                                <label for="fullName" class="block text-xs font-medium uppercase tracking-wide text-gray-400">Nome Completo</label>
+                                <div class="mt-2">
+                                    <input id="fullName" name="fullName" type="text" required placeholder="Seu Nome"
+                                        class="block w-full rounded-xl border border-white/10 bg-brand-bg/50 px-4 py-3 text-white shadow-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green sm:text-sm placeholder-gray-600 outline-none transition-all">
+                                </div>
+                            </div>
+                            ` : ''}
+
                             <div>
                                 <label for="email" class="block text-xs font-medium uppercase tracking-wide text-gray-400">Email</label>
                                 <div class="mt-2">
@@ -77,11 +140,13 @@ export const AuthModule = {
         const toggleBtn = document.getElementById('toggle-auth');
         const forgotBtn = document.getElementById('forgot-password');
 
-        toggleBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.isRegistering = !this.isRegistering;
-            this.render();
-        });
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.isRegistering = !this.isRegistering;
+                this.render();
+            });
+        }
 
         if (forgotBtn) {
             forgotBtn.addEventListener('click', async (e) => {
@@ -90,80 +155,75 @@ export const AuthModule = {
                 const messageEl = document.getElementById('auth-message');
 
                 if (!email) {
-                    messageEl.className = 'mt-4 text-center text-sm text-brand-red';
-                    messageEl.textContent = 'Digite seu email primeiro.';
+                    this.showMessage('Digite seu email primeiro.', 'error');
                     return;
                 }
 
-                messageEl.className = 'mt-4 text-center text-sm text-brand-gold';
-                messageEl.textContent = 'Enviando email de recuperação...';
-
-                const { error } = await SupabaseService.client.auth.resetPasswordForEmail(email, {
-                    redirectTo: window.location.origin,
-                });
-
-                if (error) {
-                    messageEl.className = 'mt-4 text-center text-sm text-brand-red';
-                    messageEl.textContent = error.message;
-                } else {
-                    messageEl.className = 'mt-4 text-center text-sm text-brand-green';
-                    messageEl.textContent = 'Email de recuperação enviado!';
+                try {
+                    this.showMessage('Enviando email de recuperação...', 'warning');
+                    await AuthService.resetPassword(email);
+                    this.showMessage('Email de recuperação enviado!', 'success');
+                } catch (error) {
+                    this.showMessage(error.message, 'error');
                 }
             });
         }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const messageEl = document.getElementById('auth-message');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const fullName = this.isRegistering ? document.getElementById('fullName').value : null;
+                const submitBtn = form.querySelector('button[type="submit"]');
 
-            try {
-                messageEl.className = 'mt-4 text-center text-sm text-brand-gold';
-                messageEl.textContent = 'Processando...';
+                try {
+                    this.setLoading(submitBtn, true);
+                    this.showMessage('Processando...', 'warning');
 
-                let result;
-                if (this.isRegistering) {
-                    result = await SupabaseService.client.auth.signUp({
-                        email,
-                        password
-                    });
-                } else {
-                    result = await SupabaseService.client.auth.signInWithPassword({
-                        email,
-                        password
-                    });
+                    if (this.isRegistering) {
+                        await AuthService.register(email, password, fullName);
+                        this.showMessage('Sucesso! Verifique seu email.', 'success');
+                    } else {
+                        await AuthService.login(email, password);
+                        this.showMessage('Login realizado! Redirecionando...', 'success');
+                        // AuthStateListener in App or Shared Service will handle redirect commonly, but we can enable here too
+                        window.location.href = '/dashboard.html';
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                    this.showMessage(error.message, 'error');
+
+                    // Specific error handling logic
+                    if (error.message.includes('already registered')) {
+                        this.showMessage('Este email já está cadastrado.', 'error');
+                    }
+                } finally {
+                    this.setLoading(submitBtn, false);
                 }
+            });
+        }
+    },
 
-                if (result.error) throw result.error;
+    showMessage(text, type) {
+        const el = document.getElementById('auth-message');
+        if (!el) return;
 
-                messageEl.className = 'mt-4 text-center text-sm text-brand-green';
-                messageEl.textContent = 'Sucesso! Redirecionando...';
+        el.textContent = text;
+        if (type === 'error') el.className = 'mt-4 text-center text-sm text-brand-red';
+        else if (type === 'success') el.className = 'mt-4 text-center text-sm text-brand-green';
+        else el.className = 'mt-4 text-center text-sm text-brand-gold';
+    },
 
-            } catch (error) {
-                console.error(error);
-                messageEl.className = 'mt-4 text-center text-sm text-brand-red';
-
-                if (error.message.includes('User already registered') || error.message.includes('already registered')) {
-                    messageEl.innerHTML = 'Este email já está cadastrado.<br><button id="switch-to-login" class="underline hover:text-brand-red-light mt-2">Clique aqui para entrar</button>';
-
-                    setTimeout(() => {
-                        const switchBtn = document.getElementById('switch-to-login');
-                        if (switchBtn) {
-                            switchBtn.onclick = (e) => {
-                                e.preventDefault();
-                                this.isRegistering = false;
-                                this.render();
-                            };
-                        }
-                    }, 100);
-
-                } else if (error.message.includes('Invalid login credentials')) {
-                    messageEl.textContent = 'Email ou senha incorretos.';
-                } else {
-                    messageEl.textContent = error.message;
-                }
-            }
-        });
+    setLoading(btn, isLoading) {
+        if (isLoading) {
+            btn.dataset.originalText = btn.innerText;
+            btn.innerHTML = '<span class="animate-pulse">Aguarde...</span>';
+            btn.disabled = true;
+        } else {
+            btn.innerText = btn.dataset.originalText || (this.isRegistering ? 'Cadastrar' : 'Entrar');
+            btn.disabled = false;
+        }
     }
 };

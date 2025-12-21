@@ -103,7 +103,7 @@ export const DashboardModule = {
                         <h1 class="text-2xl font-bold text-white leading-none mt-1">Visão Geral</h1>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button onclick="document.body.classList.toggle('privacy-active')" class="text-gray-400 hover:text-white transition">
+                        <button onclick="window.app.togglePrivacy()" class="text-gray-400 hover:text-white transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -129,17 +129,17 @@ export const DashboardModule = {
                     <div class="bg-gradient-to-br from-brand-surface to-brand-surface-light rounded-3xl p-6 border border-white/5 shadow-2xl relative overflow-hidden">
                          <div class="relative z-10">
                             <p class="text-gray-400 text-xs font-medium mb-1">Saldo em Conta</p>
-                            <h2 class="text-4xl font-black text-white tracking-tight">R$ ${contextBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
+                            <h2 class="text-4xl font-black text-white tracking-tight value-sensitive">R$ ${contextBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
                             
                             <!-- DRE Mini-Widget -->
                             <div class="mt-6 flex gap-4 border-t border-white/5 pt-4">
                                 <div class="flex-1">
                                     <p class="text-[10px] text-gray-400 uppercase">Receita Mês</p>
-                                    <p class="text-brand-green-light font-bold text-sm">+ ${dre.income.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                    <p class="text-brand-green-light font-bold text-sm value-sensitive">+ ${dre.income.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                                 </div>
                                 <div class="flex-1 border-l border-white/5 pl-4">
                                     <p class="text-[10px] text-gray-400 uppercase">Lucro Líquido</p>
-                                    <p class="${dre.profit >= 0 ? 'text-white' : 'text-brand-red'} font-bold text-sm">
+                                    <p class="${dre.profit >= 0 ? 'text-white' : 'text-brand-red'} font-bold text-sm value-sensitive">
                                         ${dre.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </p>
                                 </div>
@@ -151,7 +151,7 @@ export const DashboardModule = {
                     <div class="bg-brand-surface/50 rounded-2xl p-4 border border-white/5">
                         <div class="flex justify-between items-center mb-3">
                             <h3 class="text-xs text-gray-300 font-bold uppercase tracking-wider">Fluxo 7 Dias</h3>
-                            <span class="text-[10px] ${next7Days.totalReceivable - next7Days.totalPayable >= 0 ? 'text-brand-green' : 'text-brand-red'} font-bold">
+                            <span class="text-[10px] ${next7Days.totalReceivable - next7Days.totalPayable >= 0 ? 'text-brand-green' : 'text-brand-red'} font-bold value-sensitive">
                                 Líq: ${(next7Days.totalReceivable - next7Days.totalPayable).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </span>
                         </div>
@@ -403,8 +403,9 @@ export const DashboardModule = {
                     closeModal();
                     form.reset();
                     this.render(); // Refresh dashboard
+                    Toast.show('Lançamento realizado com sucesso!', 'success');
                 } catch (error) {
-                    alert('Erro: ' + error.message);
+                    Toast.show('Erro: ' + error.message, 'error');
                 }
             });
         }

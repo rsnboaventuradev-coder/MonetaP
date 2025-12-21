@@ -214,6 +214,38 @@ export const TransactionService = {
         return newTx;
     },
 
+    async createRecurring(transaction) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not logged in');
+
+        const newRecurring = {
+            id: crypto.randomUUID(),
+            user_id: user.id,
+            description: transaction.description,
+            amount: transaction.amount,
+            type: transaction.type,
+            category: transaction.category || null,
+            context: transaction.context || 'personal',
+            day_of_month: transaction.day_of_month || 1,
+            active: true,
+            created_at: new Date().toISOString()
+        };
+
+        const { error } = await supabase
+            .from('recurring_transactions')
+            .insert(newRecurring);
+
+        if (error) throw error;
+
+        // Optimistic update of local cache? 
+        // We generally don't show recurring rules in the transaction list, so no main cache update needed.
+        // But we might want to trigger a check/generate immediately if the day matches today?
+        // Let's call checkRecurringTransactions just in case.
+        this.checkRecurringTransactions();
+
+        return newRecurring;
+    },
+
     async update(id, updates) {
         const index = this.transactions.findIndex(t => t.id === id);
         if (index === -1) return;
@@ -241,6 +273,65 @@ export const TransactionService = {
             const amount = parseFloat(tx.amount);
             return tx.type === 'income' ? acc + amount : acc - amount;
         }, 0);
+    },
+
+    /**
+     * Get transactions with filtering logic (used by WalletModule)
+     */
+    async getTransactions(filters = {}) {
+        let transactions = this.transactions;
+
+        // Ensure we have data (if called before init finished)
+        if (transactions.length === 0 && navigator.onLine) {
+            await this.fetchAll();
+            transactions = this.transactions;
+        }
+
+        const { startDate, endDate, type, limit } = filters;
+
+        if (startDate) {
+            const start = new Date(startDate);
+            transactions = transactions.filter(t => new Date(t.date) >= start);
+        }
+
+        if (endDate) {
+            const end = new Date(endDate);
+            transactions = transactions.filter(t => new Date(t.date) <= end);
+        }
+
+        if (type) {
+            transactions = transactions.filter(t => t.type === type);
+        }
+
+        // Pagination/Limit
+        if (limit) {
+            transactions = transactions.slice(0, limit);
+        }
+
+        return transactions;
+    },
+
+    /**
+     * Get categories (fetched from DB or cache)
+     */
+    async getCategories() {
+        const CACHE_KEY_CATS = 'moneta_categories_cache';
+        let categories = StoreService.get(CACHE_KEY_CATS);
+
+        if (!categories || categories.length === 0) {
+            const { data } = await supabase
+                .from('categories')
+                .select('*')
+                .order('name');
+
+            if (data) {
+                categories = data;
+                StoreService.set(CACHE_KEY_CATS, categories);
+            } else {
+                categories = [];
+            }
+        }
+        return categories;
     },
 
     getRecent(limit = 5) {

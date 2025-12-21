@@ -103,10 +103,25 @@ export const GoalsModule = {
                 </div>
 
                 <!-- Goals Sections -->
-                ${this.renderGoalsSection('Segurança (Curto Prazo)', 'security', goals)}
-                ${this.renderGoalsSection('Carreira (Médio Prazo)', 'career', goals)}
-                ${this.renderGoalsSection('Estilo de Vida (Longo Prazo)', 'lifestyle', goals)}
-                ${this.renderGoalsSection('Independência Financeira', 'financial_freedom', goals)}
+                ${goals.length === 0 ? `
+                    <div class="px-6 mb-8 mt-4 animate-fade-in-up">
+                        <div class="bg-gradient-to-br from-brand-surface to-brand-bg border border-white/5 rounded-2xl p-8 text-center relative overflow-hidden group hover:border-brand-gold/20 transition-all cursor-pointer" onclick="document.getElementById('add-goal-modal').classList.remove('hidden')">
+                             <div class="w-20 h-20 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition duration-300">
+                                <span class="text-4xl">🎯</span>
+                             </div>
+                             <h3 class="text-xl font-bold text-white mb-2">Defina seus Objetivos</h3>
+                             <p class="text-gray-400 text-sm max-w-xs mx-auto mb-6">Transforme seus sonhos em realidade. Acompanhe o progresso de suas conquistas.</p>
+                             <button class="bg-brand-gold text-brand-darker font-bold py-3 px-6 rounded-xl shadow-lg shadow-brand-gold/10 active:scale-95 transition">
+                                Criar Primeira Meta
+                             </button>
+                        </div>
+                    </div>
+                ` : `
+                    ${this.renderGoalsSection('Segurança (Curto Prazo)', 'security', goals)}
+                    ${this.renderGoalsSection('Carreira (Médio Prazo)', 'career', goals)}
+                    ${this.renderGoalsSection('Estilo de Vida (Longo Prazo)', 'lifestyle', goals)}
+                    ${this.renderGoalsSection('Independência Financeira', 'financial_freedom', goals)}
+                `}
 
                 <!-- FAB -->
                 <button id="fab-add-goal" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-gold rounded-full shadow-lg shadow-brand-gold/20 flex items-center justify-center text-white active:scale-95 transition z-30">
