@@ -60,8 +60,40 @@ class App {
         }
     }
 
-    navigateTo(viewName) {
+    showLoading() {
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+            loader.classList.remove('hidden');
+            // Small delay to allow display:block to apply before opacity transition if needed
+            requestAnimationFrame(() => {
+                loader.classList.remove('opacity-0');
+                loader.classList.add('opacity-100');
+            });
+        }
+    }
+
+    hideLoading() {
+        const loader = document.getElementById('global-loader');
+        if (loader) {
+            loader.classList.remove('opacity-100');
+            loader.classList.add('opacity-0');
+            setTimeout(() => {
+                loader.classList.add('hidden');
+            }, 300); // Match transition duration
+        }
+    }
+
+    async navigateTo(viewName) {
         console.log('Navigating to:', viewName);
+
+        // Prevent re-navigation to same view if strictly needed, but sometimes we want to refresh
+        // if (this.currentView === viewName) return;
+
+        this.showLoading();
+
+        // Artificial delay for checking loader (remove in production if too slow)
+        // await new Promise(r => setTimeout(r, 300));
+
         this.currentView = viewName;
 
         // Render Bottom Nav for authenticated views
@@ -70,34 +102,49 @@ class App {
         }
 
         const mainContent = document.getElementById('main-content');
-        if (!mainContent) return;
+        if (!mainContent) {
+            this.hideLoading();
+            return;
+        }
 
-        switch (viewName) {
-            case 'dashboard':
-                DashboardModule.render();
-                break;
-            case 'wallet':
-                WalletModule.render();
-                break;
-            case 'goals':
-                GoalsModule.render();
-                break;
-            case 'reports':
-                ReportsModule.render();
-                break;
-            case 'investments':
-                InvestmentsModule.render();
-                break;
-            case 'settings':
-                SettingsModule.init().then(() => SettingsModule.render());
-                break;
-            case 'profile': // Legacy redirect
-                this.navigateTo('settings');
-                break;
-            default:
-                break;
+        // Clear content before rendering new view to avoid conflicts? 
+        // Or let modules handle it. Modules usually clear their target container.
+
+        try {
+            switch (viewName) {
+                case 'dashboard':
+                    await DashboardModule.render();
+                    break;
+                case 'wallet':
+                    await WalletModule.render();
+                    break;
+                case 'goals':
+                    await GoalsModule.render();
+                    break;
+                case 'reports':
+                    await ReportsModule.render();
+                    break;
+                case 'investments':
+                    await InvestmentsModule.render();
+                    break;
+                case 'settings':
+                    await SettingsModule.init();
+                    await SettingsModule.render();
+                    break;
+                case 'profile': // Legacy redirect
+                    this.navigateTo('settings');
+                    break;
+                default:
+                    break;
+            }
+        } catch (error) {
+            console.error('Navigation Error:', error);
+            Toast.show('Erro ao carregar a página.', 'error');
+        } finally {
+            this.hideLoading();
         }
     }
+
     togglePrivacy() {
         this.state.isPrivacyOn = !this.state.isPrivacyOn;
         localStorage.setItem('privacy_mode', this.state.isPrivacyOn);

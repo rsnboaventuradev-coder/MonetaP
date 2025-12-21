@@ -33,8 +33,65 @@ export const SupabaseService = {
     /**
      * Sign out
      */
+    /**
+     * Sign out
+     */
     async signOut() {
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
+    },
+
+    /**
+     * Centralized Error Handler
+     * Maps technical error codes to user-friendly messages.
+     * @param {Error} error - The error object from Supabase or JS
+     */
+    handleError(error) {
+        console.error('Supabase Error:', error);
+
+        // Default Message
+        let message = 'Ocorreu um erro inesperado. Tente novamente.';
+
+        // Map Specific Codes (PostgreSQL / Supabase Auth)
+        if (error?.code) {
+            switch (error.code) {
+                // Database Constraints
+                case '23505': // unique_violation
+                    message = 'Este registro já existe.';
+                    break;
+                case '23503': // foreign_key_violation
+                    message = 'Não foi possível completar a ação pois este item está vinculado a outro registro.';
+                    break;
+                case '42P01': // undefined_table
+                    message = 'Erro interno: Tabela não encontrada.';
+                    break;
+
+                // Auth Specific (Some auth errors come as strings or specific status)
+                case 'invalid_credentials':
+                case '400': // Check details for granular auth mapping if needed elsewhere
+                    // Supabase often sends 'Invalid login credentials' in message
+                    break;
+            }
+        }
+
+        // Message Content Overrides
+        if (error?.message) {
+            if (error.message.includes('Invalid login credentials')) {
+                message = 'Email ou senha incorretos.';
+            } else if (error.message.includes('User already registered')) {
+                message = 'Este email já está cadastrado.';
+            } else if (error.message.includes('weak_password')) {
+                message = 'A senha escolhida é muito fraca.';
+            }
+        }
+
+        // Show Toast
+        // Assuming Toast is available globally as window.Toast or imported. 
+        // Ideally we should inject or import. Since Toast is global in app.js via window.Toast:
+        if (window.Toast) {
+            window.Toast.show(message, 'error');
+        } else {
+            alert(message);
+        }
     }
 };

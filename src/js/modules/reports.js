@@ -6,6 +6,7 @@ export const ReportsModule = {
 
     async render() {
         const container = document.getElementById('main-content');
+        if (!container) return;
 
         if (TransactionService.transactions.length === 0) {
             await TransactionService.init();

@@ -1,16 +1,24 @@
-import { supabase } from './supabase.service.js';
+import { supabase, SupabaseService } from './supabase.service.js';
 import { SyncService } from './sync.service.js';
 import { StoreService } from './store.service.js';
+import { Observable } from '../utils/observer.js';
 
 const CACHE_KEY_TRANSACTIONS = 'moneta_transactions_cache';
 
 export const TransactionService = {
-    transactions: [],
-    listeners: [],
+    store: new Observable([]),
+
+    get transactions() {
+        return this.store.value;
+    },
+
+    set transactions(val) {
+        this.store.value = val;
+    },
 
     async init() {
-        this.transactions = StoreService.get(CACHE_KEY_TRANSACTIONS) || [];
-        if (!Array.isArray(this.transactions)) this.transactions = [];
+        const cached = StoreService.get(CACHE_KEY_TRANSACTIONS);
+        this.store.value = Array.isArray(cached) ? cached : [];
 
         // Sync with Supabase (Optimistic UI first)
         if (navigator.onLine) {
@@ -162,15 +170,35 @@ export const TransactionService = {
         StoreService.set(CACHE_KEY_TRANSACTIONS, this.transactions);
     },
 
+    async getRecurringDefinitions() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return [];
+
+        const { data, error } = await supabase
+            .from('recurring_transactions')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('active', true)
+            .order('day_of_month', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching recurring:', error);
+            return [];
+        }
+        return data;
+    },
+
+    async getRecurringTotal() {
+        const rules = await this.getRecurringDefinitions();
+        return rules.reduce((acc, rule) => acc + Number(rule.amount), 0);
+    },
+
     subscribe(listener) {
-        this.listeners.push(listener);
-        return () => {
-            this.listeners = this.listeners.filter(l => l !== listener);
-        };
+        return this.store.subscribe(listener);
     },
 
     notifyListeners() {
-        this.listeners.forEach(l => l(this.transactions));
+        this.store.notify();
     },
 
     /**
@@ -192,9 +220,18 @@ export const TransactionService = {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not logged in');
 
+        // Convert Amount to Cents (Integer)
+        // Check if amount is float string "10.50" or number 10.50
+        let amountInCents = 0;
+        if (transaction.amount !== undefined) {
+            // If we suspect input is "10.50" (Float) -> 1050
+            amountInCents = Math.round(parseFloat(transaction.amount) * 100);
+        }
+
         const newTx = {
             id: crypto.randomUUID(),
             ...transaction,
+            amount: amountInCents, // Store as Cents
             user_id: user.id,
             context: transaction.context || 'personal', // 'personal' or 'business'
             partner_id: transaction.partner_id || null,
@@ -214,43 +251,89 @@ export const TransactionService = {
         return newTx;
     },
 
-    async createRecurring(transaction) {
+    async createInstallments(data) {
+        const { installmentsCount, ...transaction } = data;
+        const totalAmount = parseFloat(transaction.amount); // float
+        const installmentValue = totalAmount / installmentsCount;
+
+        // Handle cents rounding manually to avoid "losing" cents
+        // Example: 100 / 3 = 33.333... -> 33.33 * 3 = 99.99 (miss 1 cent)
+        // Better: work with CENTS.
+        const totalCents = Math.round(totalAmount * 100);
+        const installmentCents = Math.floor(totalCents / installmentsCount);
+        const remainderCents = totalCents % installmentsCount;
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not logged in');
 
-        const newRecurring = {
-            id: crypto.randomUUID(),
-            user_id: user.id,
-            description: transaction.description,
-            amount: transaction.amount,
-            type: transaction.type,
-            category: transaction.category || null,
-            context: transaction.context || 'personal',
-            day_of_month: transaction.day_of_month || 1,
-            active: true,
-            created_at: new Date().toISOString()
-        };
+        const baseDate = new Date(transaction.date);
+        // Note: transaction.date is "YYYY-MM-DD" string or Date object?
+        // Wallet module sends "YYYY-MM-DD" from input.
+        // baseDate will be in UTC or Local? "2025-12-21" -> UTC midnight usually if new Date("2025-12-21").
+        // We just need to increment months.
 
-        const { error } = await supabase
-            .from('recurring_transactions')
-            .insert(newRecurring);
+        // We will create N promises to run in parallel or sequential?
+        // Sequential is safer for order, parallel is faster.
+        // Since we add to array `unshift`, sequential might keep order better (reverse loop?)
+        // Let's just create them.
 
-        if (error) throw error;
+        const promises = [];
 
-        // Optimistic update of local cache? 
-        // We generally don't show recurring rules in the transaction list, so no main cache update needed.
-        // But we might want to trigger a check/generate immediately if the day matches today?
-        // Let's call checkRecurringTransactions just in case.
-        this.checkRecurringTransactions();
+        for (let i = 0; i < installmentsCount; i++) {
+            // Calculate Amount for this installment
+            // Add remainder to the first installment (or last). Usually first is better for immediate payment.
+            let currentAmountCents = installmentCents;
+            if (i === 0) {
+                currentAmountCents += remainderCents;
+            }
 
-        return newRecurring;
+            // Calculate Date
+            const date = new Date(baseDate);
+            date.setMonth(baseDate.getMonth() + i);
+
+            // Handle edge case: Jan 31 + 1 month -> Feb 28/29 (Javascript handles this automatically by rolling over to Mar usually? No, setMonth tries to stay on day but rolls over if not exist)
+            // e.g. 31 Jan -> setMonth(1) -> 31 Feb (Does not exist) -> 3 March.
+            // Usually for credit card installments, if I buy on 31st, next bill is 28th? Or stays on billing cycle?
+            // For simplicity, JS default behavior is acceptable or we can stick to "Day 1" if we wanted to be strict, but keeping purchase day is better.
+            // Let's trust JS `setMonth` behaviors for now as standard "Next Month" logic.
+
+            const currentAmountFloat = currentAmountCents / 100;
+
+            const newTx = {
+                ...transaction,
+                description: `${transaction.description} (${i + 1}/${installmentsCount})`,
+                amount: currentAmountFloat, // create() handles conversion to cents again, so create() expects FLOAT.
+                date: date.toISOString(),
+                status: (i === 0 && transaction.status === 'paid') ? 'paid' : 'pending' // Only first is paid? Or all? Usually installments are "Future" so pending. User can change. 
+                // If I pay with Credit Card, effectively I "spent" it, but the bill comes later.
+                // If I put "paid", it deducts from balance immediately.
+                // Installments usually imply FUTURE payments.
+                // Let's set first as 'paid' if the user said so (default 'paid'), others as 'pending'?
+                // Or if it IS a credit card purchase, maybe it's "paid" regarding the store, but simple expense tracking...
+                // Let's keep the status passed by user (usually 'paid') for ALL if user marked as paid?
+                // No, future installments are by definition NOT paid yet (cash flow wise).
+                // Let's set i=0 as passed status, i>0 as 'pending' (scheduled).
+            };
+
+            // Force pending for future
+            if (i > 0) newTx.status = 'pending';
+
+            promises.push(this.create(newTx));
+        }
+
+        await Promise.all(promises);
     },
 
     async update(id, updates) {
         const index = this.transactions.findIndex(t => t.id === id);
         if (index === -1) return;
 
-        const updatedTx = { ...this.transactions[index], ...updates, updated_at: new Date().toISOString() };
+        const dbUpdates = { ...updates };
+        if (updates.amount !== undefined) {
+            dbUpdates.amount = Math.round(parseFloat(updates.amount) * 100);
+        }
+
+        const updatedTx = { ...this.transactions[index], ...dbUpdates, updated_at: new Date().toISOString() };
         this.transactions[index] = updatedTx;
         this.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -270,7 +353,8 @@ export const TransactionService = {
 
     getBalance() {
         return this.transactions.reduce((acc, tx) => {
-            const amount = parseFloat(tx.amount);
+            // Amount is now CENTS in DB/State
+            const amount = parseInt(tx.amount || 0);
             return tx.type === 'income' ? acc + amount : acc - amount;
         }, 0);
     },
@@ -348,7 +432,8 @@ export const TransactionService = {
         let expense = 0;
 
         txs.forEach(tx => {
-            const val = parseFloat(tx.amount);
+            // Amount is CENTS
+            const val = parseInt(tx.amount || 0);
             if (tx.type === 'income') income += val;
             else expense += Math.abs(val);
         });

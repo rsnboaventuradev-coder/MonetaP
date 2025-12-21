@@ -8,6 +8,7 @@ export const GoalsModule = {
 
     async render() {
         const container = document.getElementById('main-content');
+        if (!container) return;
 
         if (GoalsService.goals.length === 0) await GoalsService.init();
         if (BudgetService.allocations.length === 0) await BudgetService.init();

@@ -679,3 +679,14 @@ body.privacy-active .privacy-blur:hover {
 .skeleton-circle {
     border-radius: 9999px;
 }
+
+/* Global Loader Transition */
+#global-loader.opacity-0 {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#global-loader.opacity-100 {
+    opacity: 1;
+    pointer-events: auto;
+}

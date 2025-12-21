@@ -51,21 +51,82 @@ export const OnboardingModule = {
         {
             id: 'intro',
             render: () => `
-                <div class="flex-1 flex flex-col justify-center items-center text-center space-y-6">
-                    <div class="w-20 h-20 bg-brand-gold/10 rounded-full flex items-center justify-center text-4xl mb-4">🚀</div>
+                <div class="flex-1 flex flex-col justify-center items-center text-center space-y-6 animate-fade-in-up">
+                    <div class="w-24 h-24 bg-brand-gold/10 rounded-full flex items-center justify-center text-5xl mb-4 shadow-custom">🚀</div>
                     <h2 class="text-3xl font-bold text-white">Bem-vindo ao Moneta</h2>
-                    <p class="text-gray-400 text-lg">Vamos calibrar sua experiência. Em poucos passos, vamos definir seu plano financeiro.</p>
-                    <button onclick="window.app.nextStep()" class="bg-brand-gold text-brand-darker font-bold py-3 px-8 rounded-full text-lg shadow-lg hover:scale-105 transition-transform">Começar</button>
+                    <p class="text-gray-400 text-lg max-w-sm">Vamos organizar o seu futuro. Responda a algumas perguntas rápidas para personalizar sua experiência.</p>
+                    <button onclick="window.app.nextStep()" class="bg-brand-gold text-brand-darker font-bold py-4 px-10 rounded-xl text-lg shadow-glow-gold hover:scale-105 transition-transform">Começar Jornada</button>
                     <button onclick="window.app.skipOnboarding()" class="text-xs text-gray-500 font-bold hover:text-white uppercase tracking-widest mt-4">Pular (Configurar depois)</button>
                 </div>
             `
         },
+        // 1. Momento Atual
+        {
+            id: 'current_moment',
+            render: () => `
+                <div class="space-y-6 animate-fade-in-up">
+                    <div class="text-center mb-8">
+                        <div class="text-4xl mb-2">🤔</div>
+                        <h3 class="text-2xl font-bold text-white">Como descreveria sua vida financeira hoje?</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-3">
+                        ${OnboardingModule._renderOption('moment', 'debt', 'Tenho dívidas a pagar', '💸')}
+                        ${OnboardingModule._renderOption('moment', 'breaking_even', 'Pago as contas, mas não sobra', '⚖️')}
+                        ${OnboardingModule._renderOption('moment', 'saving', 'Poupo regularmente', '🐖')}
+                        ${OnboardingModule._renderOption('moment', 'optimizing', 'Quero otimizar investimentos', '🚀')}
+                    </div>
+                </div>
+            `,
+            validate: () => OnboardingModule._validateSelection('moment', 'current_financial_moment')
+        },
+        // 2. Objetivo Principal
+        {
+            id: 'main_goal',
+            render: () => `
+                <div class="space-y-6 animate-fade-in-up">
+                    <div class="text-center mb-8">
+                        <div class="text-4xl mb-2">🎯</div>
+                        <h3 class="text-2xl font-bold text-white">Qual seu principal objetivo agora?</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-3">
+                        ${OnboardingModule._renderOption('goal', 'exit_debt', 'Sair das dívidas', '🔓')}
+                        ${OnboardingModule._renderOption('goal', 'emergency_fund', 'Criar reserva de emergência', '🛡️')}
+                        ${OnboardingModule._renderOption('goal', 'investing', 'Aprender a investir', '📈')}
+                        ${OnboardingModule._renderOption('goal', 'control', 'Controlar gastos diários', '📝')}
+                    </div>
+                </div>
+            `,
+            validate: () => OnboardingModule._validateSelection('goal', 'main_financial_goal')
+        },
+        // 3. Nível de Conhecimento
+        {
+            id: 'knowledge',
+            render: () => `
+                <div class="space-y-6 animate-fade-in-up">
+                    <div class="text-center mb-8">
+                        <div class="text-4xl mb-2">📚</div>
+                        <h3 class="text-2xl font-bold text-white">Qual seu nível de conhecimento?</h3>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-3">
+                        ${OnboardingModule._renderOption('level', 'beginner', 'Iniciante (Começando agora)', '🌱')}
+                        ${OnboardingModule._renderOption('level', 'intermediate', 'Intermédio (Já invisto algo)', '🌿')}
+                        ${OnboardingModule._renderOption('level', 'advanced', 'Avançado (Carteira diversificada)', '🌳')}
+                    </div>
+                </div>
+            `,
+            validate: () => OnboardingModule._validateSelection('level', 'knowledge_level')
+        },
+        // 4. Básico (Renda)
         {
             id: 'basics',
             render: () => `
-                <div class="space-y-6">
-                    <h3 class="text-2xl font-bold text-white mb-2">O Básico 🏡</h3>
-                    <p class="text-gray-400">Para traçar a rota, precisamos saber onde você está.</p>
+                <div class="space-y-6 animate-fade-in-up">
+                    <div class="text-center mb-6">
+                        <h3 class="text-2xl font-bold text-white">Para finalizar, alguns números 🔢</h3>
+                    </div>
                     
                     <div class="space-y-4">
                         <div>
@@ -75,7 +136,7 @@ export const OnboardingModule = {
                         <div>
                             <label class="block text-xs font-bold text-brand-gold uppercase mb-2">Custo de Vida Mensal</label>
                             <input type="number" id="onb-cost" class="w-full bg-brand-bg border border-white/10 rounded-xl p-4 text-white text-lg focus:border-brand-gold outline-none" placeholder="Ex: 3000">
-                            <p class="text-[10px] text-gray-500 mt-2">Quanto você gasta para manter seu padrão de vida hoje.</p>
+                            <p class="text-[10px] text-gray-500 mt-2">Isso ajuda a calcular sua reserva de segurança.</p>
                         </div>
                     </div>
                 </div>
@@ -83,16 +144,17 @@ export const OnboardingModule = {
             validate: () => {
                 const income = document.getElementById('onb-income').value;
                 const cost = document.getElementById('onb-cost').value;
-                if (!income || !cost) { Toast.show('Preencha os valores para continuar.', 'warning'); return false; }
+                if (!income || !cost) { window.Toast.show('Preencha os valores para continuar.', 'warning'); return false; }
                 window.app.onbData.monthly_income = parseFloat(income);
                 window.app.onbData.cost_of_living = parseFloat(cost);
                 return true;
             }
         },
+        // 5. Segurança (Reserva)
         {
             id: 'safety',
             render: () => `
-                <div class="space-y-6">
+                <div class="space-y-6 animate-fade-in-up">
                     <h3 class="text-2xl font-bold text-white mb-2">Segurança 🛡️</h3>
                     <p class="text-gray-400">Sua Reserva de Emergência é seu colchão. Quantos meses de custo de vida te deixariam tranquilo?</p>
                     
@@ -112,7 +174,7 @@ export const OnboardingModule = {
                     </div>
 
                     <div class="pt-4">
-                         <label class="flex items-center gap-3 p-4 bg-white/5 rounded-xl cursor-pointer">
+                        <label class="flex items-center gap-3 p-4 bg-white/5 rounded-xl cursor-pointer">
                             <input type="checkbox" id="onb-has-fund" class="w-5 h-5 rounded border-gray-600 text-brand-gold focus:ring-brand-gold bg-gray-700">
                             <span class="text-sm text-gray-200">Já possuo esse valor investido em liquidez.</span>
                         </label>
@@ -122,44 +184,35 @@ export const OnboardingModule = {
             validate: () => {
                 const hasFund = document.getElementById('onb-has-fund').checked;
                 window.app.onbData.has_emergency_fund = hasFund;
+                if (!window.app.onbData.emergency_months) window.app.onbData.emergency_months = 6;
                 return true;
             }
-        },
-        {
-            id: 'expert',
-            render: () => `
-                <div class="space-y-6">
-                    <h3 class="text-2xl font-bold text-white mb-2">Experiência 🧠</h3>
-                    <p class="text-gray-400">Qual seu nível de conhecimento em investimentos (Ações, FIIs, Cripto)?</p>
-                    
-                    <div class="space-y-3">
-                         <button onclick="window.app.setLevel('beginner', this)" class="lvl-opt w-full bg-brand-gold/20 border border-brand-gold p-4 rounded-xl flex items-center gap-4 text-left transition ring-2 ring-brand-gold ring-offset-2 ring-offset-[#111]">
-                            <div class="w-10 h-10 rounded-full bg-brand-gold flex items-center justify-center text-brand-darker font-bold">🌱</div>
-                            <div>
-                                <strong class="block text-white">Iniciante</strong>
-                                <span class="text-xs text-brand-gold/80">Estou aprendendo, foco em Renda Fixa.</span>
-                            </div>
-                        </button>
-                         <button onclick="window.app.setLevel('intermediate', this)" class="lvl-opt w-full bg-white/5 border border-white/10 p-4 rounded-xl flex items-center gap-4 text-left hover:bg-white/10 transition">
-                            <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">🌿</div>
-                            <div>
-                                <strong class="block text-white">Intermediário</strong>
-                                <span class="text-xs text-gray-400">Já invisto em FIIs ou Ações, mas quero evoluir.</span>
-                            </div>
-                        </button>
-                         <button onclick="window.app.setLevel('advanced', this)" class="lvl-opt w-full bg-white/5 border border-white/10 p-4 rounded-xl flex items-center gap-4 text-left hover:bg-white/10 transition">
-                            <div class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold">🌳</div>
-                            <div>
-                                <strong class="block text-white">Avançado</strong>
-                                <span class="text-xs text-gray-400">Domino análise fundamentalista e alocação.</span>
-                            </div>
-                        </button>
-                    </div>
-                </div>
-            `,
-            validate: () => true
         }
     ],
+
+    // Helper functions for UI
+    _renderOption(group, value, label, icon) {
+        return `
+            <label class="cursor-pointer relative group">
+                <input type="radio" name="${group}" value="${value}" class="peer sr-only">
+                <div class="p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 peer-checked:bg-brand-gold/20 peer-checked:border-brand-gold peer-checked:shadow-glow-gold transition-all flex items-center space-x-4">
+                    <span class="text-2xl grayscale group-hover:grayscale-0 peer-checked:grayscale-0">${icon}</span>
+                    <span class="font-medium text-white">${label}</span>
+                    <div class="w-4 h-4 rounded-full border border-white/30 ml-auto peer-checked:bg-brand-gold peer-checked:border-brand-gold"></div>
+                </div>
+            </label>
+        `;
+    },
+
+    _validateSelection(groupName, dataKey) {
+        const selected = document.querySelector(`input[name="${groupName}"]:checked`);
+        if (!selected) {
+            window.Toast.show('Por favor, selecione uma opção.', 'warning');
+            return false;
+        }
+        window.app.onbData[dataKey] = selected.value;
+        return true;
+    },
 
     renderStep(stepIndex) {
         const container = document.getElementById('onb-content');
@@ -172,13 +225,13 @@ export const OnboardingModule = {
         // Add navigation if not intro
         if (step.id !== 'intro') {
             html += `
-                <div class="mt-auto pt-8 flex justify-between items-center">
+    < div class="mt-auto pt-8 flex justify-between items-center" >
                     <button onclick="window.app.prevStep()" class="text-gray-500 hover:text-white font-bold text-sm px-4">Voltar</button>
                     <button onclick="window.app.nextStep()" class="bg-white text-brand-darker font-bold py-3 px-8 rounded-full shadow hover:bg-gray-200 transition">
                         ${stepIndex === this.steps.length - 1 ? 'Finalizar' : 'Próximo'}
                     </button>
-               </div>
-            `;
+               </div >
+    `;
         }
 
         container.innerHTML = html;
@@ -186,7 +239,7 @@ export const OnboardingModule = {
 
         // Update progress
         const pct = ((stepIndex) / (this.steps.length - 1)) * 100;
-        document.getElementById('onb-progress').style.width = `${pct}%`;
+        document.getElementById('onb-progress').style.width = `${pct}% `;
     },
 
     async finish() {
@@ -195,11 +248,11 @@ export const OnboardingModule = {
             const { data: { user } } = await supabase.auth.getUser();
             const updates = {
                 monthly_income: window.app.onbData.monthly_income,
-                // cost_of_living not stored in profile usually, but good for calibration. We will skip storing it directly in profile for now unless we add a column, or just assume it updates the dashboard avg calc if we persist it.
-                // Actually, let's create a "Emergency Fund" Goal automatically based on this.
+                current_financial_moment: window.app.onbData.current_financial_moment,
+                main_financial_goal: window.app.onbData.main_financial_goal,
                 knowledge_level: window.app.onbData.knowledge_level,
-                emergency_fund_target_months: window.app.onbData.emergency_months,
-                has_emergency_fund: window.app.onbData.has_emergency_fund,
+                emergency_fund_target_months: window.app.onbData.emergency_months || 6, // Default fallback
+                has_emergency_fund: window.app.onbData.has_emergency_fund || false,
                 evolution_stage: window.app.onbData.has_emergency_fund ? 'accumulation' : 'security',
                 onboarding_completed: true,
                 updated_at: new Date().toISOString()

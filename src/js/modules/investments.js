@@ -9,14 +9,25 @@ export const InvestmentsModule = {
     avgCostOfLiving: 0,
     listFilter: null, // 'stock', 'fii', 'crypto', 'fixed' - For ARCA interaction
 
+    unsubscribe: null,
+
     async render() {
         const container = document.getElementById('main-content');
+        if (!container) return;
         this.activeTab = this.activeTab || 'resumo';
         this.listFilter = null; // Reset filter on full render
 
         await InvestmentsService.init();
         await TransactionService.init();
         await this.fetchUserData();
+
+        // Subscribe to Store updates
+        if (this.unsubscribe) this.unsubscribe();
+        this.unsubscribe = InvestmentsService.subscribe(() => {
+            if (document.getElementById('investments-list-container')) {
+                this.renderView(container); // Or optimize to update parts
+            }
+        });
 
         this.renderView(container);
         window.app.openAnalysisModal = this.openAnalysisModal.bind(this);
@@ -58,6 +69,9 @@ export const InvestmentsModule = {
     },
 
     renderView(container) {
+        // Tag container content for easy check
+        // We will wrap content in investments-container class
+
         const investments = InvestmentsService.investments;
         const totalEquity = InvestmentsService.calculateTotalEquity();
         const totalInvested = InvestmentsService.calculateTotalInvested();

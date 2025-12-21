@@ -23,7 +23,7 @@ export const GoalsService = {
 
         const { data, error } = await supabase
             .from('goals')
-            .select('id,user_id,name,target_amount,current_amount,deadline,type,status,created_at,updated_at,notes,investment_link')
+            .select('*')
             .eq('user_id', user.id)
             .order('deadline', { ascending: true });
 

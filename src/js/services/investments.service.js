@@ -1,8 +1,27 @@
 import { SupabaseService } from './supabase.service.js';
 import { SyncService } from './sync.service.js';
+import { Observable } from '../utils/observer.js';
 
 export const InvestmentsService = {
-    investments: [],
+    store: new Observable([]),
+
+    get investments() {
+        return this.store.value;
+    },
+
+    set investments(val) {
+        this.store.value = val;
+    },
+
+    getTotalValue() {
+        return this.store.value.reduce((acc, inv) => {
+            const price = inv.current_price || 0;
+            const qtd = inv.quantity || 0;
+            // storing as integer cents, so need to divide by 100 for display, 
+            // but let's keep it consistent. If stored as 1050 (10.50), then (1050 * qtd) / 100 = value.
+            return acc + ((price * qtd) / 100);
+        }, 0);
+    },
 
     async init() {
         const { data: { session } } = await SupabaseService.client.auth.getSession();
@@ -20,21 +39,34 @@ export const InvestmentsService = {
     },
 
     async fetchInvestments(force = false) {
-        try {
-            const { data, error } = await SupabaseService.client
-                .from('investments')
-                .select('*')
-                .order('created_at', { ascending: false });
+        // Load from Store/Cache?
+        // this.investments = StoreService.get('investments_cache') || []; 
+        if (navigator.onLine) {
+            await this.fetchAll();
+        }
+    },
 
-            if (error) throw error;
-            this.investments = data || [];
+    subscribe(listener) {
+        return this.store.subscribe(listener);
+    },
 
-            // Dispatch event for UI updates
-            window.dispatchEvent(new CustomEvent('investments-updated'));
-            return this.investments;
-        } catch (error) {
-            console.error('Error fetching investments:', error);
-            return [];
+    notifyListeners() {
+        this.store.notify();
+    },
+
+    async fetchAll() {
+        const { data: { user } } = await SupabaseService.client.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await SupabaseService.client
+            .from('investments')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+        if (!error && data) {
+            this.investments = data;
+            this.notifyListeners();
         }
     },
 
@@ -43,36 +75,56 @@ export const InvestmentsService = {
         const { data: { user }, error: authError } = await SupabaseService.client.auth.getUser();
         if (authError || !user) throw new Error('User not authenticated');
 
-        // Optimistic Update can be added here if needed, keeping it simple for now
+        // Prepare data: Convert monetary values to Cents (Integer)
+        const dbData = {
+            ...investment,
+            user_id: user.id
+        };
+
+        // If average_price comes as float (e.g. 10.50), convert to 1050
+        if (investment.average_price !== undefined) {
+            dbData.average_price = Math.round(investment.average_price * 100);
+        }
+        // If current_price comes as float
+        if (investment.current_price !== undefined) {
+            dbData.current_price = Math.round(investment.current_price * 100);
+        }
+
         const { data, error } = await SupabaseService.client
             .from('investments')
-            .insert([{
-                ...investment,
-                user_id: user.id
-            }])
+            .insert([dbData])
             .select()
             .single();
 
         if (error) {
-            // If offline, add to Sync Queue (Implementation dependent on SyncService limits)
             if (!navigator.onLine) {
-                SyncService.addToQueue('create_investment', investment);
-                this.investments.unshift({ ...investment, id: 'temp-' + Date.now() });
-                window.dispatchEvent(new CustomEvent('investments-updated'));
+                SyncService.addToQueue('create_investment', dbData);
+                this.investments.unshift({ ...dbData, id: 'temp-' + Date.now() });
+                this.notifyListeners();
                 return;
             }
             throw error;
         }
 
         this.investments.unshift(data);
-        window.dispatchEvent(new CustomEvent('investments-updated'));
+        this.notifyListeners();
         return data;
     },
 
     async update(id, updates) {
+        // Prepare data: Convert monetary values to Cents
+        const dbUpdates = { ...updates };
+
+        if (updates.average_price !== undefined) {
+            dbUpdates.average_price = Math.round(updates.average_price * 100);
+        }
+        if (updates.current_price !== undefined) {
+            dbUpdates.current_price = Math.round(updates.current_price * 100);
+        }
+
         const { data, error } = await SupabaseService.client
             .from('investments')
-            .update(updates)
+            .update(dbUpdates)
             .eq('id', id)
             .select()
             .single();
@@ -82,7 +134,7 @@ export const InvestmentsService = {
         const index = this.investments.findIndex(i => i.id === id);
         if (index !== -1) {
             this.investments[index] = data;
-            window.dispatchEvent(new CustomEvent('investments-updated'));
+            this.notifyListeners();
         }
         return data;
     },
@@ -96,39 +148,51 @@ export const InvestmentsService = {
         if (error) throw error;
 
         this.investments = this.investments.filter(i => i.id !== id);
-        window.dispatchEvent(new CustomEvent('investments-updated'));
+        this.notifyListeners();
     },
 
-    // --- Helpers & Financial Logic ---
+    // --- Helpers & Financial Logic (Operating in CENTS) ---
 
+    // Returns Total Equity in CENTS
     calculateTotalEquity() {
-        return this.investments.reduce((acc, curr) => acc + (curr.quantity * curr.current_price), 0);
+        return this.investments.reduce((acc, curr) => {
+            const priceInCents = curr.current_price || 0;
+            // Quantity typically float. Result -> Cents.
+            return acc + (curr.quantity * priceInCents);
+        }, 0);
     },
 
+    // Returns Total Invested in CENTS
     calculateTotalInvested() {
-        return this.investments.reduce((acc, curr) => acc + (curr.quantity * curr.average_price), 0);
+        return this.investments.reduce((acc, curr) => {
+            const avgPriceInCents = curr.average_price || 0;
+            return acc + (curr.quantity * avgPriceInCents);
+        }, 0);
     },
 
+    // Returns Profit/Loss in CENTS
     getProfitLoss() {
-        const current = this.calculateTotalEquity();
-        const invested = this.calculateTotalInvested();
+        const current = this.calculateTotalEquity(); // Cents
+        const invested = this.calculateTotalInvested(); // Cents
         return current - invested;
     },
 
+    // Returns Estimated Monthly Income in CENTS
     calculateProjectedMonthlyIncome() {
-        let monthlyIncome = 0;
-        // Constants for Estimation (Annual)
+        let monthlyIncome = 0; // Cents
+        // Constants for Estimation (Annual %)
         const RATES = { 'CDI': 12.15, 'SELIC': 12.25, 'IPCA': 4.50 };
 
         this.investments.forEach(asset => {
-            const totalValue = asset.quantity * (asset.current_price || 0);
+            const priceInCents = asset.current_price || 0;
+            const totalValueCents = asset.quantity * priceInCents; // Cents
 
             if (asset.type === 'fii' && asset.dividend_yield) {
-                // Assuming DY input is Annual %. 
-                monthlyIncome += (totalValue * (asset.dividend_yield / 100)) / 12;
+                // DY is Annual %. e.g. 10 means 10%
+                monthlyIncome += (totalValueCents * (asset.dividend_yield / 100)) / 12;
             }
             else if (asset.type === 'stock' && asset.dividend_yield) {
-                monthlyIncome += (totalValue * (asset.dividend_yield / 100)) / 12;
+                monthlyIncome += (totalValueCents * (asset.dividend_yield / 100)) / 12;
             }
             else if (['fixed_income', 'treasure'].includes(asset.type)) {
                 let estimatedAnnualRate = 0;
@@ -142,21 +206,24 @@ export const InvestmentsService = {
                 } else {
                     estimatedAnnualRate = 10;
                 }
-                monthlyIncome += (totalValue * (estimatedAnnualRate / 100)) / 12;
+                monthlyIncome += (totalValueCents * (estimatedAnnualRate / 100)) / 12;
             }
         });
-        return monthlyIncome;
+        return Math.round(monthlyIncome); // Return integer cents
     },
 
     // --- Advanced Indices ---
 
     calculateARCA() {
+        // Values in CENTS
         const arca = { a: 0, r: 0, c: 0, alt: 0 };
-        const totalEquity = this.calculateTotalEquity();
+        const totalEquity = this.calculateTotalEquity(); // Cents
 
         if (totalEquity > 0) {
             this.investments.forEach(inv => {
-                const val = inv.quantity * inv.current_price;
+                const priceInCents = inv.current_price || 0;
+                const val = inv.quantity * priceInCents; // Cents
+
                 if (inv.type === 'stock') arca.a += val;
                 else if (inv.type === 'fii') arca.r += val;
                 else if (['fixed_income', 'treasure'].includes(inv.type)) arca.c += val;
@@ -165,7 +232,7 @@ export const InvestmentsService = {
         }
 
         return {
-            values: arca,
+            values: arca, // Cents
             percentages: {
                 a: totalEquity > 0 ? (arca.a / totalEquity) * 100 : 0,
                 r: totalEquity > 0 ? (arca.r / totalEquity) * 100 : 0,
@@ -175,24 +242,25 @@ export const InvestmentsService = {
         };
     },
 
-    calculateGIF(avgCostOfLiving) {
-        if (!avgCostOfLiving || avgCostOfLiving <= 0) return 0;
-        const projectedIncome = this.calculateProjectedMonthlyIncome();
-        return (projectedIncome / avgCostOfLiving) * 100;
+    calculateGIF(avgCostOfLivingCents) {
+        if (!avgCostOfLivingCents || avgCostOfLivingCents <= 0) return 0;
+        const projectedIncomeCents = this.calculateProjectedMonthlyIncome();
+        // (IncomeCents / CostCents) * 100 -> Ratio matches
+        return (projectedIncomeCents / avgCostOfLivingCents) * 100;
     },
 
-    calculatePNIF(avgCostOfLiving) {
-        if (!avgCostOfLiving || avgCostOfLiving <= 0) return { target: 0, progress: 0 };
-        const pnifTotal = avgCostOfLiving * 300; // Rule of 300 (4% Withdrawal)
-        const totalEquity = this.calculateTotalEquity();
+    calculatePNIF(avgCostOfLivingCents) {
+        if (!avgCostOfLivingCents || avgCostOfLivingCents <= 0) return { target: 0, progress: 0 };
+        const pnifTotalCents = avgCostOfLivingCents * 300; // Rule of 300
+        const totalEquityCents = this.calculateTotalEquity();
         return {
-            target: pnifTotal,
-            progress: pnifTotal > 0 ? (totalEquity / pnifTotal) * 100 : 0
+            target: pnifTotalCents,
+            progress: pnifTotalCents > 0 ? (totalEquityCents / pnifTotalCents) * 100 : 0
         };
     },
 
     calculateEvolutionProjection() {
-        const currentEquity = this.calculateTotalEquity();
+        const currentEquity = this.calculateTotalEquity() / 100; // Use Float for projection loop clarity
         const dataMy = [currentEquity];
         const dataCDI = [currentEquity];
         const dataIbov = [currentEquity];
@@ -207,6 +275,8 @@ export const InvestmentsService = {
             dataIbov.push(dataIbov[i - 1] * rateIbov);
         }
 
+        // Return Data in Real (Float) for Chart consumption, or Cents?
+        // Charts usually expect float values. Keeping as Float for View Layer.
         return { labels: ['Hoje', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'], dataMy, dataCDI, dataIbov };
     }
 };

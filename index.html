@@ -61,6 +61,17 @@
     <!-- Container para Modais -->
     <div id="modal-container"></div>
 
+    <!-- Global Loader -->
+    <div id="global-loader"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-brand-bg/80 backdrop-blur-sm hidden transition-opacity duration-300">
+        <div class="flex flex-col items-center">
+            <div
+                class="w-12 h-12 border-4 border-brand-gold/30 border-t-brand-gold rounded-full animate-spin mb-4 shadow-glow-gold">
+            </div>
+            <p class="text-brand-gold font-bold tracking-widest text-sm animate-pulse">CARREGANDO...</p>
+        </div>
+    </div>
+
     <!-- Bibliotecas Externas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

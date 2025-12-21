@@ -3,14 +3,25 @@ import { InvestmentsService } from '../services/investments.service.js';
 import { PartnersService } from '../services/partners.service.js';
 import { GoalsService } from '../services/goals.service.js';
 import { BudgetService } from '../services/budget.service.js';
+import { GamificationService } from '../services/gamification.service.js';
 import { SupabaseService } from '../services/supabase.service.js';
 
 export const DashboardModule = {
     currentContext: 'personal', // 'personal' | 'business'
     chartInstances: {},
 
+    unsubscribers: [],
+
     async render() {
         const container = document.getElementById('main-content');
+        if (!container) return; // Null Check to prevent race condition
+
+        // Clean up old listeners
+        this.unsubscribers.forEach(unsub => unsub());
+        this.unsubscribers = [];
+
+        // Show Skeleton while loading
+        this.renderSkeleton(container);
 
         // Ensure all data is ready
         await Promise.all([
@@ -21,7 +32,46 @@ export const DashboardModule = {
             BudgetService.init()
         ]);
 
+        // Subscribe to changes
+        this.unsubscribers.push(TransactionService.subscribe(() => this.refreshView()));
+        this.unsubscribers.push(InvestmentsService.subscribe(() => this.refreshView()));
+        this.unsubscribers.push(GoalsService.subscribe(() => this.refreshView()));
+
         await this.renderView(container);
+    },
+
+    renderSkeleton(container) {
+        container.innerHTML = `
+            <div class="flex flex-col min-h-full bg-brand-bg safe-area-top pb-24 space-y-6 animate-pulse">
+                <!-- Header Skeleton -->
+                <div class="px-6 pt-6 flex justify-between items-center">
+                    <div class="space-y-2">
+                        <div class="h-3 w-20 bg-white/5 rounded"></div>
+                        <div class="h-8 w-40 bg-white/5 rounded"></div>
+                    </div>
+                </div>
+
+                <!-- Balance Card Skeleton -->
+                <div class="px-6">
+                    <div class="h-48 bg-white/5 rounded-3xl"></div>
+                </div>
+
+                <!-- Widgets Skeleton -->
+                <div class="px-6 grid grid-cols-2 gap-4">
+                    <div class="h-32 bg-white/5 rounded-2xl"></div>
+                    <div class="h-32 bg-white/5 rounded-2xl"></div>
+                </div>
+            </div>
+        `;
+    },
+
+    async refreshView() {
+        // Debounce or just re-render view part if container exists
+        const container = document.getElementById('main-content');
+        if (container && container.querySelector('.dashboard-container')) {
+            // Re-render only if dashboard is still active view
+            await this.renderView(container);
+        }
     },
 
     async renderView(container) {
@@ -29,251 +79,264 @@ export const DashboardModule = {
         const session = await SupabaseService.getSession();
         const user = session?.user;
 
-        // Fetch Profile for Cost of Living
-        let avgCostOfLiving = 5000; // Default
+        // Fetch Profile for Cost of Living (optional for now, kept for transparency)
+        let avgCostOfLiving = 5000;
         if (user) {
             const { data: profile } = await SupabaseService.client
                 .from('profiles')
                 .select('monthly_income')
                 .eq('id', user.id)
                 .maybeSingle();
-
-            if (profile && profile.monthly_income) {
-                avgCostOfLiving = parseFloat(profile.monthly_income);
-            }
+            if (profile && profile.monthly_income) avgCostOfLiving = parseFloat(profile.monthly_income);
         }
 
         const today = new Date();
-        const balance = TransactionService.getBalance(); // Total (need to filter by context if separated)
-        // For this version, 'getBalance' is total. If we want context specific balance, we'd need to filter txs.
-        // Assuming 'getBalance' sums everything. Let's filter manually if needed.
-        const allTxs = TransactionService.transactions;
-        const contextTxs = this.currentContext === 'all' ? allTxs : allTxs.filter(t => t.context === this.currentContext);
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
 
-        const contextBalance = contextTxs.reduce((acc, tx) => {
-            return tx.type === 'income' ? acc + parseFloat(tx.amount) : acc - parseFloat(tx.amount);
-        }, 0);
+        // 1. BALANCES
+        const walletBalance = TransactionService.getBalance();
+        const investmentsBalance = InvestmentsService.getTotalValue();
+        const totalNetWorth = walletBalance + investmentsBalance;
 
-        // DRE (Profit of the Month)
-        const dre = TransactionService.getFinancialStatement(today.getMonth(), today.getFullYear(), this.currentContext);
+        // 2. MONTHLY SUMMARY (Income vs Expense)
+        const dre = TransactionService.getFinancialStatement(currentMonth, currentYear, 'personal'); // Defaulting to personal for main view or aggregate? User said "Overview". Let's use currentContext.
 
-        // Next 7 Days
-        const next7Days = TransactionService.getNext7DaysFlow(this.currentContext);
+        // We need to aggregate contextual data if currentContext is 'all' or specific.
+        // Assuming currentContext affects what we show.
+        const summaryStats = TransactionService.getFinancialStatement(currentMonth, currentYear, this.currentContext === 'all' ? undefined : this.currentContext);
 
-        // BI: Partner Ranking (Income only)
-        const partners = PartnersService.partners;
-        const partnerRanking = partners.map(p => {
-            const total = allTxs
-                .filter(t => t.partner_id === p.id && t.type === 'income')
-                .reduce((acc, t) => acc + parseFloat(t.amount), 0);
-            return { name: p.name, total, color: p.color };
-        }).sort((a, b) => b.total - a.total).slice(0, 3); // Top 3
+        // 3. HISTORY (Last 6 Months)
+        // We need a helper to get last 6 months data.
+        const historyData = this.getLast6MonthsHistory();
 
-        // Long Term: Indices
-        // GIF
-        const gifVal = InvestmentsService.calculateGIF(avgCostOfLiving);
+        // 4. CATEGORY BREAKDOWN (Current Month)
+        const categoriesData = this.getCategoryBreakdown(currentMonth, currentYear);
 
-        // ARCA (Asset Allocation)
-        const arca = InvestmentsService.calculateARCA();
+        // 5. RECENT TRANSACTIONS
+        const recentTransactions = TransactionService.transactions
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 5);
 
-        // Emergency Fund Progress
-        const emergencyFundGoal = GoalsService.goals.find(g => g.name.toLowerCase().includes('emergência') || g.type === 'safety');
-        const emergencyProgress = emergencyFundGoal ? (emergencyFundGoal.current_amount / emergencyFundGoal.target_amount) * 100 : 0;
-
-        // Operations: Lab Bills
-        // Find expenses with category 'Laboratório' or similar keywords and status 'pending'
-        const pendingLabBills = allTxs.filter(tx =>
-            tx.type === 'expense' &&
-            tx.status === 'pending' &&
-            (tx.description.toLowerCase().includes('lab') || tx.description.toLowerCase().includes('protético') || (tx.classification === 'laboratorio'))
-        );
-        const labBillsTotal = pendingLabBills.reduce((acc, tx) => acc + parseFloat(tx.amount), 0);
-
-
-        // ... existing renderView content ...
 
         // --- HTML CONSTRUCTION ---
         container.innerHTML = `
-            <div class="flex flex-col min-h-full bg-brand-bg safe-area-top pb-24 space-y-6">
+            <div class="dashboard-container flex flex-col min-h-full bg-brand-bg safe-area-top pb-24 space-y-6">
                 
-                <!-- 1. HEADER & TOGGLE -->
+                <!-- HEADER -->
                 <div class="px-6 pt-6 flex justify-between items-center bg-brand-bg sticky top-0 z-20 pb-4 border-b border-white/5 backdrop-blur-md">
                     <div>
                         <p class="text-xs text-gray-400 font-medium uppercase tracking-wider">Dashboard</p>
                         <h1 class="text-2xl font-bold text-white leading-none mt-1">Visão Geral</h1>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button onclick="window.app.togglePrivacy()" class="text-gray-400 hover:text-white transition">
+                         <button onclick="window.app.togglePrivacy()" class="text-gray-400 hover:text-white transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <!-- Context Toggle -->
-                        <div class="flex bg-brand-surface rounded-full p-1 border border-white/5">
-                            <button onclick="window.app.toggleDashboardContext('personal')" 
-                                class="px-3 py-1.5 rounded-full text-xs font-bold transition-all ${this.currentContext === 'personal' ? 'bg-brand-gold text-brand-darker shadow-lg shadow-brand-gold/20' : 'text-gray-400 hover:text-white'}">
-                                PF
-                            </button>
-                            <button onclick="window.app.toggleDashboardContext('business')" 
-                                class="px-3 py-1.5 rounded-full text-xs font-bold transition-all ${this.currentContext === 'business' ? 'bg-brand-green text-brand-darker shadow-lg shadow-brand-green/20' : 'text-gray-400 hover:text-white'}">
-                                PJ
-                            </button>
+                        <div class="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs cursor-pointer hover:bg-brand-gold/30 transition">
+                            ${user?.email?.charAt(0).toUpperCase() || 'U'}
                         </div>
                     </div>
                 </div>
 
-                <!-- 2. LIQUID CASH (The "Hoje") -->
-                <div class="px-6 space-y-4">
-                    <!-- Balance Card -->
-                    <div class="bg-gradient-to-br from-brand-surface to-brand-surface-light rounded-3xl p-6 border border-white/5 shadow-2xl relative overflow-hidden">
+                <!-- 1. TOTAL BALANCE CARD -->
+                <div class="px-6">
+                    <div class="bg-gradient-to-br from-brand-surface to-brand-surface-light rounded-3xl p-6 border border-white/5 shadow-2xl relative overflow-hidden group">
+                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32 text-brand-gold" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                            </svg>
+                         </div>
                          <div class="relative z-10">
-                            <p class="text-gray-400 text-xs font-medium mb-1">Saldo em Conta</p>
-                            <h2 class="text-4xl font-black text-white tracking-tight value-sensitive">R$ ${contextBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-                            
-                            <!-- DRE Mini-Widget -->
-                            <div class="mt-6 flex gap-4 border-t border-white/5 pt-4">
-                                <div class="flex-1">
-                                    <p class="text-[10px] text-gray-400 uppercase">Receita Mês</p>
-                                    <p class="text-brand-green-light font-bold text-sm value-sensitive">+ ${dre.income.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                                </div>
-                                <div class="flex-1 border-l border-white/5 pl-4">
-                                    <p class="text-[10px] text-gray-400 uppercase">Lucro Líquido</p>
-                                    <p class="${dre.profit >= 0 ? 'text-white' : 'text-brand-red'} font-bold text-sm value-sensitive">
-                                        ${dre.profit.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </p>
-                                </div>
+                            <p class="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Patrimônio Total</p>
+                            <h2 class="text-4xl font-black text-white tracking-tight value-sensitive">
+                                ${totalNetWorth.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </h2>
+                            <div class="mt-4 flex gap-4 text-xs font-medium text-gray-400">
+                                <span>🏦 Contas: <span class="text-white value-sensitive">${walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
+                                <span>📈 Invest: <span class="text-white value-sensitive">${investmentsBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
                             </div>
                          </div>
                     </div>
+                </div>
 
-                    <!-- Next 7 Days Cashflow -->
-                    <div class="bg-brand-surface/50 rounded-2xl p-4 border border-white/5">
-                        <div class="flex justify-between items-center mb-3">
-                            <h3 class="text-xs text-gray-300 font-bold uppercase tracking-wider">Fluxo 7 Dias</h3>
-                            <span class="text-[10px] ${next7Days.totalReceivable - next7Days.totalPayable >= 0 ? 'text-brand-green' : 'text-brand-red'} font-bold value-sensitive">
-                                Líq: ${(next7Days.totalReceivable - next7Days.totalPayable).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            </span>
-                        </div>
-                        <div class="flex justify-between gap-2 overflow-x-auto pb-2 scrollbar-none">
-                            ${next7Days.flow.map(day => `
-                                <div class="flex flex-col items-center min-w-[3rem] p-2 rounded-xl ${day.net < 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/5'} border">
-                                    <span class="text-[10px] text-gray-400 font-bold mb-1">${day.dayName}</span>
-                                    <span class="text-xs font-bold text-white">${day.date.getDate()}</span>
-                                    ${day.net !== 0 ? `
-                                        <span class="text-[9px] mt-1 ${day.net > 0 ? 'text-brand-green' : 'text-brand-red'}">
-                                            ${day.net > 0 ? '•' : ''}${Math.abs(day.net).toLocaleString('pt-BR', { notation: 'compact' })}
-                                        </span>
-                                    ` : '<span class="text-[9px] mt-1 text-gray-600">-</span>'}
-                                </div>
-                            `).join('')}
-                        </div>
+                <!-- 2. MONTHLY SUMMARY WIDGET -->
+                <div class="px-6 grid grid-cols-2 gap-3">
+                    <div class="bg-brand-surface/50 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+                         <div class="w-8 h-8 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                         </div>
+                         <div>
+                             <p class="text-[10px] text-gray-400 uppercase font-bold">Receitas</p>
+                             <p class="text-lg font-bold text-white value-sensitive">${((summaryStats.income || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                         </div>
+                    </div>
+                    <div class="bg-brand-surface/50 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+                         <div class="w-8 h-8 rounded-full bg-brand-red/20 text-brand-red flex items-center justify-center mb-2">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                         </div>
+                         <div>
+                             <p class="text-[10px] text-gray-400 uppercase font-bold">Despesas</p>
+                             <p class="text-lg font-bold text-white value-sensitive">${((summaryStats.expense || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                         </div>
                     </div>
                 </div>
 
-                <!-- 3. BUSINESS INTELLIGENCE (Partner Ranking) - Only for PJ/All -->
-                ${this.currentContext !== 'personal' ? `
+                <!-- 3. FINANCIAL HISTORY (Chart) -->
                 <div class="px-6">
-                    <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-brand-gold rounded-full"></span>
-                        Ranking de Receita
-                    </h3>
+                    <h3 class="text-sm font-bold text-gray-300 uppercase mb-3 px-1">Histórico (6 Meses)</h3>
+                    <div class="bg-brand-surface p-4 rounded-2xl border border-white/5 h-48 flex items-end justify-between gap-2 overflow-hidden relative">
+                        <!-- Horizontal Grid Lines -->
+                        <div class="absolute inset-0 flex flex-col justify-between pointer-events-none p-4 opacity-10">
+                            <div class="border-t border-white"></div>
+                            <div class="border-t border-white"></div>
+                            <div class="border-t border-white"></div>
+                        </div>
+
+                        ${historyData.map(month => {
+            const maxVal = Math.max(...historyData.map(h => Math.max(h.income, h.expense))) || 1;
+            const hIncome = (month.income / maxVal) * 100;
+            const hExpense = (month.expense / maxVal) * 100;
+
+            return `
+                                <div class="flex flex-col items-center justify-end h-full flex-1 gap-1">
+                                    <div class="w-full flex gap-1 items-end justify-center h-full">
+                                        <div class="w-2 bg-brand-green/80 rounded-t-sm transition-all hover:bg-brand-green" style="height: ${Math.max(hIncome, 5)}%"></div>
+                                        <div class="w-2 bg-brand-red/80 rounded-t-sm transition-all hover:bg-brand-red" style="height: ${Math.max(hExpense, 5)}%"></div>
+                                    </div>
+                                    <span class="text-[9px] text-gray-500 font-bold uppercase">${month.label}</span>
+                                </div>
+                            `;
+        }).join('')}
+                    </div>
+                </div>
+
+                <!-- 4. CATEGORY BREAKDOWN -->
+                <div class="px-6">
+                    <div class="flex justify-between items-center mb-3 px-1">
+                         <h3 class="text-sm font-bold text-gray-300 uppercase">Top Categorias</h3>
+                         <button onclick="window.app.navigateTo('settings')" class="text-[10px] text-brand-gold font-bold uppercase hover:underline">Gerenciar Tags</button>
+                    </div>
+                    <div class="bg-brand-surface rounded-2xl border border-white/5 overflow-hidden">
+                        ${categoriesData.length > 0 ? categoriesData.map(cat => `
+                            <div class="p-4 border-b border-white/5 last:border-0 flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs" style="background-color: ${cat.color}20; color: ${cat.color}">
+                                        ${cat.icon.includes('fa-') ? '<i class="' + cat.icon + '"></i>' : cat.icon}
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-white">${cat.name}</p>
+                                        <div class="w-24 h-1.5 bg-gray-700/50 rounded-full mt-1 overflow-hidden">
+                                            <div class="h-full rounded-full" style="width: ${cat.percentage}%; background-color: ${cat.color}"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-bold text-gray-300 value-sensitive">${(cat.total / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                            </div>
+                        `).join('') : '<div class="p-4 text-center text-gray-500 text-xs">Sem dados para este mês.</div>'}
+                    </div>
+                </div>
+
+                <!-- 5. RECENT TRANSACTIONS -->
+                <div class="px-6 pb-6">
+                    <div class="flex justify-between items-center mb-3 px-1">
+                        <h3 class="text-sm font-bold text-gray-300 uppercase">Últimas Transações</h3>
+                        <button onclick="window.app.navigateTo('wallet')" class="text-[10px] text-brand-gold font-bold uppercase hover:underline">Ver Todas</button>
+                    </div>
                     <div class="space-y-3">
-                        ${partnerRanking.map((p, i) => `
-                            <div class="mb-2">
-                                <div class="flex justify-between text-xs mb-1">
-                                    <span class="text-gray-300 font-medium">${i + 1}. ${p.name}</span>
-                                    <span class="text-white font-bold">${p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        ${recentTransactions.map(t => {
+            const isExpense = t.type === 'expense';
+            const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
+            const sign = isExpense ? '-' : '+';
+            return `
+                                <div class="bg-brand-surface p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg">
+                                            ${t.category_icon && !t.category_icon.includes('fa-') ? t.category_icon : '💸'}
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-bold text-white truncate max-w-[150px]">${t.description}</p>
+                                            <p class="text-[10px] text-gray-500">${new Date(t.date).toLocaleDateString('pt-BR')}</p>
+                                        </div>
+                                    </div>
+                                    <span class="text-sm font-bold ${colorClass} value-sensitive">${sign} ${(parseFloat(t.amount) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                                 </div>
-                                <div class="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                                    <div class="h-full rounded-full" style="width: ${(p.total / (partnerRanking[0].total || 1)) * 100}%; background-color: ${p.color}"></div>
-                                </div>
-                            </div>
-                        `).join('')}
+                            `;
+        }).join('')}
                     </div>
                 </div>
-                ` : ''}
-
-                <!-- 4. LONG TERM METRICS (The "Amanhã") -->
-                <div class="px-6">
-                    <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-purple-500 rounded-full"></span>
-                        Liberdade Financeira
-                    </h3>
-                    <div class="grid grid-cols-2 gap-3">
-                        <!-- GIF -->
-                        <div class="bg-brand-surface/50 p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
-                            <span class="text-2xl font-black text-white">${gifVal.toFixed(0)}%</span>
-                            <span class="text-[10px] text-gray-400 uppercase font-bold mt-1">Grau de Indep.</span>
-                            <div class="w-full bg-gray-800 h-1 mt-2 rounded-full overflow-hidden">
-                                <div class="bg-purple-500 h-full" style="width: ${Math.min(gifVal, 100)}%"></div>
-                            </div>
-                        </div>
-                        <!-- Emergency Fund -->
-                        <div class="bg-brand-surface/50 p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
-                            <span class="text-2xl font-black text-white">${emergencyProgress.toFixed(0)}%</span>
-                            <span class="text-[10px] text-gray-400 uppercase font-bold mt-1">Reserva Emerg.</span>
-                            <div class="w-full bg-gray-800 h-1 mt-2 rounded-full overflow-hidden">
-                                <div class="bg-blue-500 h-full" style="width: ${Math.min(emergencyProgress, 100)}%"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 5. OPERATIONS & ALERTS -->
-                ${pendingLabBills.length > 0 ? `
-                <div class="px-6">
-                    <div class="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h4 class="text-red-400 font-bold text-sm">Boletos Laboratório</h4>
-                                <p class="text-xs text-gray-400">${pendingLabBills.length} pendentes</p>
-                            </div>
-                        </div>
-                        <span class="text-white font-bold text-sm">${labBillsTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                    </div>
-                </div>
-                ` : ''}
-
-                <!-- 6. QUICK ACTIONS (Sticky Bottom/FAB style) -->
-                <div class="px-6 grid grid-cols-2 gap-4">
-                    <button onclick="window.app.openTransactionModal('income')" 
-                        class="bg-brand-surface border border-white/10 hover:bg-brand-surface-light p-4 rounded-2xl flex items-center gap-3 transition group active:scale-95">
-                        <div class="w-10 h-10 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center group-hover:scale-110 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                            </svg>
-                        </div>
-                        <div class="text-left">
-                            <p class="text-white font-bold text-sm">Novo</p>
-                            <p class="text-[10px] text-gray-400">Lançamento</p>
-                        </div>
-                    </button>
-                     <button onclick="window.app.openTransactionModal('income', { description: 'Recebimento Clínica' })" 
-                        class="bg-brand-surface border border-white/10 hover:bg-brand-surface-light p-4 rounded-2xl flex items-center gap-3 transition group active:scale-95">
-                        <div class="w-10 h-10 rounded-full bg-brand-gold/20 text-brand-gold flex items-center justify-center group-hover:scale-110 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
-                            </svg>
-                        </div>
-                        <div class="text-left">
-                            <p class="text-white font-bold text-sm">Vincular</p>
-                            <p class="text-[10px] text-gray-400">Receita</p>
-                        </div>
-                    </button>
-                </div>
-
+                
                 <!-- MODAL (Integrated for Quick Actions) -->
                 ${this.renderModalID()}
             </div>
         `;
 
         this.addModalListeners(container);
+    },
+
+    getLast6MonthsHistory() {
+        const history = [];
+        const today = new Date();
+
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            const month = d.getMonth();
+            const year = d.getFullYear();
+            const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+
+            const stats = TransactionService.getFinancialStatement(month, year, this.currentContext === 'all' ? undefined : this.currentContext);
+            history.push({
+                label,
+                income: stats.revenue,
+                expense: stats.expenses
+            });
+        }
+        return history;
+    },
+
+    getCategoryBreakdown(month, year) {
+        // Filter transactions for specific month/year and type=expense
+        let txs = TransactionService.transactions.filter(t => {
+            const d = new Date(t.date);
+            return d.getMonth() === month &&
+                d.getFullYear() === year &&
+                t.type === 'expense';
+        });
+
+        if (this.currentContext !== 'all') {
+            txs = txs.filter(t => t.context === this.currentContext);
+        }
+
+        const totalExpense = txs.reduce((acc, t) => acc + parseFloat(t.amount), 0);
+        if (totalExpense === 0) return [];
+
+        // Group by Category Name
+        const map = {};
+        txs.forEach(t => {
+            const catName = t.category_name || 'Geral'; // Assuming join was done or name provided
+            // NOTE: TransactionService usually provides category_name if joined. If not, might be ID. 
+            // In wallet.js we saw `t.category_name`. Assuming it's available.
+
+            if (!map[catName]) {
+                map[catName] = {
+                    name: catName,
+                    total: 0,
+                    color: t.category_color || '#6B7280',
+                    icon: t.category_icon || '🏷️'
+                };
+            }
+            map[catName].total += parseFloat(t.amount);
+        });
+
+        const sorted = Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
+
+        return sorted.map(c => ({
+            ...c,
+            percentage: ((c.total / totalExpense) * 100).toFixed(0)
+        }));
     },
 
     renderModalID() {

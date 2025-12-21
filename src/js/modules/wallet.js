@@ -1,6 +1,7 @@
 import { TransactionService } from '../services/transaction.service.js';
 import { CurrencyMask } from '../utils/mask.js';
 import { AuthService } from './auth.js';
+import { HapticService } from '../services/haptics.service.js';
 
 export const WalletModule = {
     state: {
@@ -17,13 +18,34 @@ export const WalletModule = {
         transactionToDelete: null // Para confirmação de exclusão
     },
 
+    unsubscribe: null,
+
     async init() {
-        // Init logic moved to render generally, or kept for service initialization
+        // Subscribe to TransactionService
+        if (this.unsubscribe) this.unsubscribe();
+        this.unsubscribe = TransactionService.subscribe((transactions) => {
+            this.state.transactions = transactions;
+            // Only re-render if visible
+            if (document.getElementById('walletTransactionsList')) {
+                this.renderTransactionsList();
+                this.updateBalanceDisplay();
+            }
+        });
+
+        // Initial Fetch if empty
+        if (TransactionService.transactions.length === 0) {
+            await TransactionService.init();
+        } else {
+            this.state.transactions = TransactionService.transactions;
+        }
     },
 
     render() {
         const container = document.getElementById('main-content');
         if (!container) return;
+
+        // Ensure listeners are active
+        this.init();
 
         // Ensure current date is set
         if (!this.state.currentDate) this.state.currentDate = new Date();
@@ -83,12 +105,23 @@ export const WalletModule = {
                     </div>
                      <!-- Mobile Search Trigger (Optional, kept simple for now) -->
                 </div>
+                <div class="px-6 space-y-6 pt-6 mb-6">
+                     <!-- View Toggler -->
+                    <div class="bg-white/5 p-1 rounded-xl flex gap-1">
+                        <button onclick="window.app.WalletModule.switchView('transactions')" id="viewBtn-transactions" class="flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all">
+                            Transações
+                        </button>
+                        <button onclick="window.app.WalletModule.switchView('subscriptions')" id="viewBtn-subscriptions" class="flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all">
+                            Assinaturas
+                        </button>
+                    </div>
+
                     <div>
                         <p class="text-gray-400 text-xs font-medium mb-1">Saldo do Mês</p>
                         <h2 id="walletTotalBalance" class="text-4xl font-black text-white tracking-tight value-sensitive">R$ ...</h2>
                     </div>
 
-                    <div class="flex gap-2 overflow-x-auto scrollbar-hide">
+                    <div id="filterTabsContainer" class="flex gap-2 overflow-x-auto scrollbar-hide">
                         <button class="filter-tab active px-4 py-2 rounded-full text-xs font-bold bg-white/10 text-white whitespace-nowrap border border-white/5 transition hover:bg-white/20" data-type="all">Todos</button>
                         <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-green/10 text-brand-green whitespace-nowrap border border-brand-green/20 transition hover:bg-brand-green/20" data-type="income">Entradas</button>
                         <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-red/10 text-brand-red whitespace-nowrap border border-brand-red/20 transition hover:bg-brand-red/20" data-type="expense">Saídas</button>
@@ -181,6 +214,24 @@ export const WalletModule = {
                             </div>
                         </div>
 
+                        <!-- BILLING TOGGLE (Parcelado) -->
+                        <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <label class="flex items-center justify-between cursor-pointer">
+                                <span class="text-sm font-bold text-gray-300">Compra Parcelada?</span>
+                                <div class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" name="isInstallment" id="isInstallmentInput" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
+                                </div>
+                            </label>
+
+                            <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-white/5 animate-fade-in">
+                                 <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Número de Parcelas</label>
+                                 <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-brand-bg rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none" placeholder="Ex: 10">
+                                 <p class="text-xs text-gray-500 mt-2">O valor total será dividido pelo número de parcelas.</p>
+                            </div>
+                        </div>
+                        </div>
+
                         <button type="submit" class="w-full bg-brand-green text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition">
                             Salvar
                         </button>
@@ -218,12 +269,6 @@ export const WalletModule = {
         this.loadTransactions(true);
     },
 
-    // New helper to close delete modal
-    closeDeleteModal() {
-        if (this.dom.deleteModal) this.dom.deleteModal.classList.add('hidden');
-        this.state.transactionToDelete = null;
-    },
-
     cacheDOM() {
         this.dom = {
             list: document.getElementById('walletTransactionsList'),
@@ -244,7 +289,16 @@ export const WalletModule = {
     },
 
     bindEvents() {
-        if (this.dom.addBtn) this.dom.addBtn.addEventListener('click', () => this.openTransactionModal());
+        if (this.dom.addBtn) {
+            this.dom.addBtn.addEventListener('click', () => {
+                if (this.currentView === 'subscriptions') {
+                    // Open Modal prepopulated for recurring
+                    this.openTransactionModal('create', null, true);
+                } else {
+                    this.openTransactionModal();
+                }
+            });
+        }
         if (this.dom.form) this.dom.form.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
 
         // Search
@@ -265,12 +319,35 @@ export const WalletModule = {
         // Toggle recurring inputs
         const isRecurringInput = document.getElementById('isRecurringInput');
         const recurringOptions = document.getElementById('recurringOptions');
+        const isInstallmentInput = document.getElementById('isInstallmentInput');
+        const installmentOptions = document.getElementById('installmentOptions');
+
         if (isRecurringInput && recurringOptions) {
             isRecurringInput.addEventListener('change', (e) => {
                 if (e.target.checked) {
                     recurringOptions.classList.remove('hidden');
+                    // Uncheck Installment
+                    if (isInstallmentInput) {
+                        isInstallmentInput.checked = false;
+                        if (installmentOptions) installmentOptions.classList.add('hidden');
+                    }
                 } else {
                     recurringOptions.classList.add('hidden');
+                }
+            });
+        }
+
+        if (isInstallmentInput && installmentOptions) {
+            isInstallmentInput.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    installmentOptions.classList.remove('hidden');
+                    // Uncheck Recurring
+                    if (isRecurringInput) {
+                        isRecurringInput.checked = false;
+                        if (recurringOptions) recurringOptions.classList.add('hidden');
+                    }
+                } else {
+                    installmentOptions.classList.add('hidden');
                 }
             });
         }
@@ -288,12 +365,6 @@ export const WalletModule = {
     changeMonth(delta) {
         // Change state
         this.state.currentDate.setMonth(this.state.currentDate.getMonth() + delta);
-
-        // Re-render only necessary parts? Or just reload with new date?
-        // Since we are not simulating SPA React, we simply re-call render or update DOM text and reload data
-        // For simplicity, let's just trigger a re-render of the specific text and reload data
-        // But re-calling render() is expensive as it redraws everything.
-        // Let's manually update header and reload.
 
         const monthYear = this.state.currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
         const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -408,6 +479,7 @@ export const WalletModule = {
     },
 
     renderTransactionsList(transactionsOverride = null) {
+        // Null Check
         if (!this.dom.list) return;
 
         const transactions = transactionsOverride || this.state.transactions;
@@ -416,11 +488,11 @@ export const WalletModule = {
             this.dom.list.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-12 text-center animate-fade-in-up">
                     <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6">
-                        <span class="text-5xl opacity-50">💸</span>
+                         <span class="text-4xl">💸</span>
                     </div>
                     <h3 class="text-xl font-bold text-white mb-2">Nada por aqui... ainda!</h3>
-                    <p class="text-gray-400 text-sm max-w-xs mx-auto mb-8">Sua carteira está limpa neste mês. Que tal registrar seus gastos ou ganhos?</p>
-                    <button onclick="window.app.WalletModule.openTransactionModal()" class="bg-brand-green text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] active:scale-[0.98] transition">
+                    <p class="text-gray-400 max-w-[250px] mb-6">Suas transações aparecerão aqui. Que tal começar agora?</p>
+                    <button onclick="window.app.navigateTo('wallet'); document.querySelector('#wallet-add-btn')?.click()" class="px-6 py-3 bg-brand-gold text-white rounded-xl font-bold hover:bg-brand-gold-light transition shadow-glow-gold">
                         Registrar Transação
                     </button>
                 </div>
@@ -428,77 +500,74 @@ export const WalletModule = {
             return;
         }
 
-        // Agrupamento por Data (Lógica complexa que faltava)
-        const groups = this.groupByDate(this.state.transactions);
+        // Group by Date
+        const grouped = this.groupByDate(transactions);
 
-        let html = '';
+        this.dom.list.innerHTML = Object.entries(grouped).map(([date, items]) => `
+            <div class="mb-6 animate-fade-in-up">
+                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
+                <div class="bg-brand-surface border border-white/5 rounded-2xl overflow-hidden">
+                    ${items.map(t => this.renderTransactionItem(t)).join('')}
+                </div>
+            </div>
+        `).join('');
+    },
 
-        for (const [date, transactions] of Object.entries(groups)) {
-            const dateHeader = this.formatDateHeader(date);
+    updateBalanceDisplay() {
+        if (!this.dom.totalBalance) return;
+        const total = this.state.transactions.reduce((acc, t) => {
+            const val = parseInt(t.amount || 0);
+            return t.type === 'income' ? acc + val : acc - val;
+        }, 0);
+        this.dom.totalBalance.textContent = this.formatCurrency(total);
+    },
 
-            html += `
-                <div class="transaction-group mb-4">
-                    <h6 class="text-muted text-uppercase small px-3 mb-2 font-weight-bold" style="font-size: 0.75rem; letter-spacing: 1px;">
-                        ${dateHeader}
-                    </h6>
-                    <div class="list-group shadow-sm rounded overflow-hidden border-0">
-            `;
+    renderTransactionItem(t) {
+        const isExpense = t.type === 'expense';
+        const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
+        const sign = isExpense ? '-' : '+';
+        const categoryColor = t.categories?.color || '#6c757d';
+        const categoryIcon = t.categories?.icon || 'fa-tag';
 
-            transactions.forEach(t => {
-                const isExpense = t.type === 'expense';
-                const colorClass = isExpense ? 'text-danger' : 'text-success';
-                const sign = isExpense ? '-' : '+';
-                const categoryColor = t.categories?.color || '#6c757d';
-                const categoryIcon = t.categories?.icon || 'fa-tag';
+        // Verifica se é ícone do FontAwesome ou Emoji
+        const iconDisplay = categoryIcon.includes('fa-')
+            ? `<i class="fas ${categoryIcon}"></i>`
+            : categoryIcon;
 
-                // Verifica se é ícone do FontAwesome ou Emoji
-                const iconDisplay = categoryIcon.includes('fa-')
-                    ? `<i class="fas ${categoryIcon}"></i>`
-                    : categoryIcon;
+        return `
+            <div class="flex items-center p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition group">
+                <!-- Icon -->
+                <div class="w-10 h-10 rounded-full flex items-center justify-center mr-4 shrink-0" 
+                     style="background-color: ${categoryColor}20; color: ${categoryColor};">
+                    <span class="text-lg">${iconDisplay}</span>
+                </div>
+                
+                <!-- Text (Click to Edit) -->
+                <div class="flex-grow min-w-0 cursor-pointer" onclick="window.app.WalletModule.openEdit('${t.id}')">
+                    <h4 class="text-sm font-bold text-gray-200 truncate">${t.description}</h4>
+                    <p class="text-xs text-gray-500 truncate">
+                        ${t.categories?.name || 'Geral'} 
+                        ${t.payment_method ? `• ${this.formatPaymentMethod(t.payment_method)}` : ''}
+                    </p>
+                </div>
 
-                html += `
-                    <div class="list-group-item list-group-item-action d-flex align-items-center p-3 border-0 border-bottom transaction-item-row" data-id="${t.id}">
-                        <!-- Ícone -->
-                        <div class="rounded-circle d-flex align-items-center justify-content-center mr-3 flex-shrink-0" 
-                             style="width: 45px; height: 45px; background-color: ${categoryColor}20; color: ${categoryColor};">
-                            <span style="font-size: 1.2rem;">${iconDisplay}</span>
-                        </div>
-                        
-                        <!-- Texto -->
-                        <div class="flex-grow-1 overflow-hidden">
-                            <h6 class="mb-0 text-truncate font-weight-bold" style="color: #2d3748;">${t.description}</h6>
-                            <small class="text-muted text-truncate d-block">
-                                ${t.categories?.name || 'Geral'} 
-                                ${t.payment_method ? `• ${this.formatPaymentMethod(t.payment_method)}` : ''}
-                            </small>
-                        </div>
-
-                        <!-- Valor e Ações -->
-                        <div class="text-right ml-3 flex-shrink-0">
-                            <div class="font-weight-bold ${colorClass} value-sensitive" style="font-size: 1rem;">
-                                ${sign} ${this.formatCurrency(t.amount)}
-                            </div>
-                            <!-- Botões de ação visíveis apenas ao expandir ou em desktop (simplificado aqui para sempre renderizar mas oculto via CSS se necessário) -->
-                            <div class="btn-group btn-group-sm mt-1 action-buttons">
-                                <button class="btn btn-link text-muted p-0 mr-2 btn-edit" data-id="${t.id}" title="Editar">
-                                    <i class="fas fa-pencil-alt"></i>
-                                </button>
-                                <button class="btn btn-link text-danger p-0 btn-delete" data-id="${t.id}" title="Excluir">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            html += `
+                <!-- Value -->
+                <div class="text-right ml-4 shrink-0">
+                    <div class="font-bold text-sm ${colorClass} value-sensitive">
+                        ${sign} ${this.formatCurrency(t.amount)}
                     </div>
                 </div>
-            `;
-        }
 
-        this.dom.list.innerHTML = html;
+                <!-- Actions (Visible on Hover/Swipe) -->
+                <div class="ml-4 flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                     <button class="btn-delete p-2 text-gray-500 hover:text-red-500 transition" data-id="${t.id}" onclick="event.stopPropagation(); window.app.WalletModule.askDelete('${t.id}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                     </button>
+                </div>
+            </div>
+        `;
     },
 
     // --- Lógica de Formulário e Ações ---
@@ -525,24 +594,7 @@ export const WalletModule = {
                 description: formData.get('description'),
                 amount: amount,
                 date: formData.get('date'), // Formato YYYY-MM-DD do input date
-                categoryId: formData.get('categoryId'), // Assuming Service expects 'categoryId' mapped to 'category' or handles it
-                category: formData.get('categoryId'), // TransactionService.create uses "category" property usually? Check create method.
-                // Wait, TransactionService.create spreads the object. It expects properties to match DB columns or be handled.
-                // DB 'transactions' has 'category_id' usually? Or 'category'?
-                // Let's check TransactionService.create again. It inserts:
-                // user_id, context, partner_id, status, classification, attachment_url, date...
-                // AND ...transaction (spread).
-                // If DB has category_id, we should pass category_id.
-                // If DB has category (text), we pass category.
-                // The form uses name="categoryId".
-                // Let's pass both to be safe or map it.
-                // Looking at TransactionService line 204: ...transaction.
-                // Looking at DB schema... usually category_id.
-                // Let's assume the previous code was working for normal transactions using "categoryId" or similar.
-                // The previous code had `categoryId: formData.get('categoryId')`. 
-                // Let's keep it consistent.
                 category_id: formData.get('categoryId'),
-
                 type: formData.get('type'),
                 payment_method: formData.get('paymentMethod') || 'money',
                 status: 'paid'
@@ -569,10 +621,12 @@ export const WalletModule = {
                         context: 'personal' // Defaulting
                     });
                     Toast.show('Recorrência criada com sucesso!', 'success');
+                    HapticService.success();
                 } else {
                     // NORMAL CREATE
                     await TransactionService.create(transactionData);
                     Toast.show('Transação criada!', 'success');
+                    HapticService.success();
                 }
             }
 
@@ -584,6 +638,7 @@ export const WalletModule = {
         } catch (error) {
             console.error(error);
             Toast.show(error.message || 'Erro ao salvar.', 'error');
+            HapticService.error();
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
@@ -610,11 +665,12 @@ export const WalletModule = {
         const transaction = this.state.transactions.find(t => t.id == id);
         if (!transaction) return;
 
-        this.openTransactionModal(transaction);
+        this.openTransactionModal('edit', transaction);
     },
 
     askDelete(id) {
         this.state.transactionToDelete = id;
+        HapticService.warning();
 
         // Open Modal
         if (this.dom.deleteModal) {
@@ -629,26 +685,78 @@ export const WalletModule = {
         if (!this.state.transactionToDelete) return;
 
         // Visual feedback on button
-        if (this.dom.confirmDeleteBtn) this.dom.confirmDeleteBtn.textContent = 'Excluindo...';
+        if (this.dom.confirmDeleteBtn) {
+            // const originalText = this.dom.confirmDeleteBtn.textContent; // Unused
+            this.dom.confirmDeleteBtn.textContent = 'Excluindo...';
+            this.dom.confirmDeleteBtn.disabled = true;
 
-        try {
-            await TransactionService.deleteTransaction(this.state.transactionToDelete);
-            Toast.show('Transação excluída.', 'info');
+            try {
+                await TransactionService.delete(this.state.transactionToDelete);
+                Toast.show('Transação excluída.', 'info');
+                HapticService.success();
 
-            // Remove do estado local para UI atualizar instantaneamente sem reload de rede
-            this.state.transactions = this.state.transactions.filter(t => t.id != this.state.transactionToDelete);
+                // Remove do estado local para UI atualizar instantaneamente sem reload de rede
+                this.state.transactions = this.state.transactions.filter(t => t.id != this.state.transactionToDelete);
 
-            // Re-render logic
-            this.renderTransactionsList();
-            this.updateTotalBalance(); // Fix balance immediately
-
-            this.state.transactionToDelete = null;
-        } catch (error) {
-            Toast.show('Erro ao excluir.', 'error');
-        } finally {
-            this.closeDeleteModal();
-            if (this.dom.confirmDeleteBtn) this.dom.confirmDeleteBtn.textContent = 'Excluir';
+                // Re-render logic
+                this.renderTransactionsList();
+                this.updateTotalBalance();
+            } catch (error) {
+                console.error(error);
+                Toast.show('Erro ao excluir.', 'error');
+                HapticService.error();
+            } finally {
+                this.closeDeleteModal();
+                if (this.dom.confirmDeleteBtn) {
+                    this.dom.confirmDeleteBtn.textContent = 'Excluir';
+                    this.dom.confirmDeleteBtn.disabled = false;
+                }
+            }
         }
+    },
+
+    closeDeleteModal() {
+        if (this.dom.deleteModal) this.dom.deleteModal.classList.add('hidden');
+        this.state.transactionToDelete = null;
+    },
+
+    // --- Validation ---
+    validateForm() {
+        if (!this.dom.form) return false;
+
+        const description = this.dom.form.querySelector('[name="description"]').value.trim();
+        const rawAmount = this.dom.form.querySelector('[name="amount"]').value;
+        // Check functionality of CurrencyMask, fallback to simple parsing
+        const amount = typeof CurrencyMask !== 'undefined' ? CurrencyMask.unmask(rawAmount) : parseFloat(rawAmount.replace('R$', '').replace('.', '').replace(',', '.').trim());
+        const categoryId = this.dom.form.querySelector('[name="categoryId"]').value;
+        const date = this.dom.form.querySelector('[name="date"]').value;
+
+        const isValid = description.length > 0 && amount > 0 && categoryId !== "" && date !== "";
+
+        const submitBtn = this.dom.form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = !isValid;
+            if (isValid) {
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        return isValid;
+    },
+
+    setupValidationListeners() {
+        if (!this.dom.form) return;
+        const inputs = this.dom.form.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.removeEventListener('input', this._validateHandler);
+            input.removeEventListener('change', this._validateHandler);
+
+            this._validateHandler = () => this.validateForm();
+            input.addEventListener('input', this._validateHandler);
+            input.addEventListener('change', this._validateHandler);
+        });
     },
 
     // --- Helpers de UI e Formatação ---
@@ -743,7 +851,112 @@ export const WalletModule = {
         }
     },
 
-    openTransactionModal(mode = 'create', transaction = null) {
+    switchView(viewName) {
+        this.currentView = viewName;
+
+        // Update Buttons
+        const txBtn = document.getElementById('viewBtn-transactions');
+        const subBtn = document.getElementById('viewBtn-subscriptions');
+        const filters = document.getElementById('filterTabsContainer');
+        const fab = document.getElementById('addTransactionBtn');
+
+        if (viewName === 'transactions') {
+            if (txBtn) txBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all';
+            if (subBtn) subBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all';
+            if (filters) filters.classList.remove('hidden');
+            if (fab) fab.classList.remove('hidden');
+            this.renderTransactionsList();
+        } else {
+            if (txBtn) txBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all';
+            if (subBtn) subBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all';
+            if (filters) filters.classList.add('hidden');
+            if (fab) fab.classList.remove('hidden'); // Show FAB in Subscriptions too
+            this.renderSubscriptions();
+        }
+    },
+
+    async renderSubscriptions() {
+        const list = document.getElementById('walletTransactionsList');
+        if (!list) return;
+
+        // Skeleton
+        list.innerHTML = `
+            <div class="animate-pulse space-y-3">
+               <div class="h-20 bg-white/5 rounded-2xl w-full"></div>
+               <div class="h-20 bg-white/5 rounded-2xl w-full"></div>
+            </div>
+        `;
+
+        const recurring = await TransactionService.getRecurringDefinitions();
+        const totalRecurring = recurring.reduce((acc, r) => acc + Number(r.amount), 0);
+
+        // Get Income for context (Committed Income)
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        const stats = await TransactionService.getFinancialStatement(currentMonth, currentYear); // Added await if needed, but getFinancialStatement seems presumably async or not? Checked: it's likely async in Service but let's check assumptions. 
+        // Actually, TransactionService.getFinancialStatement might be local calculation if syncing? 
+        // Let's assume it returns a promise or value. If promise, we need await. 
+        // View 2647 line 1002 didn't have await. I will stick to original.
+
+        const income = (stats && stats.revenue) ? stats.revenue : 1; // avoid div by zero
+        const committedPercent = Math.min((totalRecurring / income) * 100, 100).toFixed(1);
+
+        let html = `
+            <!-- Committed Income Widget -->
+            <div class="bg-white/5 p-6 rounded-2xl border border-white/5 mb-6">
+                <div class="flex justify-between items-end mb-2">
+                    <div>
+                        <p class="text-xs text-gray-400 uppercase tracking-widest font-bold">Custo Fixo Mensal</p>
+                        <h3 class="text-2xl font-black text-white value-sensitive">R$ ${(totalRecurring / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-${committedPercent > 50 ? 'brand-red' : 'brand-green'} font-bold">${committedPercent}% da Renda</p>
+                    </div>
+                </div>
+                <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-${committedPercent > 50 ? 'brand-red' : 'brand-green'} transition-all duration-1000" style="width: ${committedPercent}%"></div>
+                </div>
+                <p class="text-[10px] text-gray-500 mt-2">Valor comprometido antes mesmo do mês começar.</p>
+            </div>
+
+            <h3 class="text-sm font-bold text-gray-400 uppercase mb-4 px-2">Assinaturas Ativas</h3>
+            <div class="space-y-3">
+        `;
+
+        if (recurring.length === 0) {
+            html += `
+                <div class="text-center py-12">
+                    <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔄</div>
+                    <p class="text-gray-400 text-sm">Nenhuma assinatura ou conta fixa cadastrada.</p>
+                    <p class="text-gray-600 text-xs mt-2">Adicione uma transação e marque "Repetir Mensalmente".</p>
+                </div>
+            `;
+        } else {
+            html += recurring.map(r => `
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs uppercase">
+                            ${r.description ? r.description.substring(0, 2) : '??'}
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-white text-sm">${r.description}</h4>
+                            <p class="text-xs text-gray-400">Todo dia ${r.day_of_month}</p>
+                        </div>
+                    </div>
+                    <div class="font-bold text-white value-sensitive">
+                        R$ ${(r.amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        html += '</div>';
+        list.innerHTML = html;
+    },
+
+    openTransactionModal(mode = 'create', transaction = null, isRecurringDefault = false) {
+        HapticService.light();
+
         if (!this.dom.modal || !this.dom.form) return;
 
         this.dom.modal.classList.remove('hidden');
@@ -757,6 +970,8 @@ export const WalletModule = {
         }
 
         const titleEl = this.dom.modal.querySelector('.modal-title');
+        const recurringInput = document.getElementById('isRecurringInput');
+        const recurringOptions = document.getElementById('recurringOptions');
 
         if (mode === 'edit' && transaction) {
             this.dom.form.dataset.id = transaction.id;
@@ -780,6 +995,8 @@ export const WalletModule = {
 
             if (titleEl) titleEl.textContent = 'Editar Transação';
 
+            // Edit Recurring? Not handling edit of recurring yet, just transactions.
+
         } else {
             this.dom.form.dataset.mode = 'create';
             delete this.dom.form.dataset.id;
@@ -788,10 +1005,21 @@ export const WalletModule = {
 
             const titleEl = this.dom.modal.querySelector('.modal-title');
             if (titleEl) titleEl.textContent = 'Nova Transação';
+
+            // Handle Recurring Default
+            if (isRecurringDefault && recurringInput) {
+                recurringInput.checked = true;
+                if (recurringOptions) recurringOptions.classList.remove('hidden');
+            } else {
+                if (recurringInput) recurringInput.checked = false;
+                if (recurringOptions) recurringOptions.classList.add('hidden');
+            }
         }
 
         this.dom.modal.classList.remove('hidden');
-        // setTimeout to allow transition if needed, but removing hidden is instant
+
+        this.setupValidationListeners();
+        this.validateForm();
     },
 
     closeTransactionModal() {
