@@ -148,16 +148,26 @@ export const SettingsService = {
 
     // --- PROFILE ALIAS ---
     async updateProfile(updates) {
+        console.log('🔧 SettingsService.updateProfile chamado com:', updates);
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not found');
 
-        const { error } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', user.id);
+        console.log('👤 User ID:', user.id);
+        console.log('📤 Fazendo upsert na tabela profiles...');
 
-        if (error) throw error;
-        // Note: Profile state is usually managed by auth.js or dashboard.js, but we can emit an event or return success
+        const { data, error } = await supabase
+            .from('profiles')
+            .upsert({ id: user.id, ...updates })
+            .select();
+
+        console.log('📥 Resposta do Supabase:', { data, error });
+
+        if (error) {
+            console.error('❌ Erro no upsert:', error);
+            throw error;
+        }
+
+        console.log('✅ updateProfile concluído com sucesso!');
         return true;
     },
 
@@ -172,3 +182,5 @@ export const SettingsService = {
         this.listeners.forEach(l => l(this));
     }
 };
+
+

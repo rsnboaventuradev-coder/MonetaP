@@ -122,3 +122,5 @@ function monthsSecured(liquidity, cost) {
     if (cost === 0) return 0;
     return liquidity / cost;
 }
+
+

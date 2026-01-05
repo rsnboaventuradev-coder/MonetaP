@@ -227,7 +227,31 @@ select.input-form {
     border: 1px solid #4b5563;
     border-radius: 0.375rem;
     padding: 0.75rem;
-    color: white;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Fix for inputs in modals - ensure text is visible */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input[type="tel"],
+select,
+textarea {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Fix for autofill styling */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px #374151 inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    caret-color: #ffffff;
 }
 
 .input-form:focus,

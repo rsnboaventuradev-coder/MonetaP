@@ -30,7 +30,8 @@ export const TransactionService = {
 
     async checkProLaboreAutomation() {
         // 1. Fetch Profile Settings
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) return;
 
         const { data: profile } = await supabase
@@ -50,13 +51,18 @@ export const TransactionService = {
         const month = today.getMonth();
         const year = today.getFullYear();
 
+        // Convert pro_labore_amount from reais to centavos for comparison
+        // profile.pro_labore_amount is stored as reais (e.g., 3500.00)
+        // tx.amount is stored as centavos (e.g., 350000)
+        const proLaboreAmountCents = Math.round(profile.pro_labore_amount * 100);
+
         // 2. Check if transactions exist for this month
         // We look for a VERY specific pattern: matching amount, context, and description for this month
         const proLaboreTx = this.transactions.find(tx => {
             const txDate = new Date(tx.date);
             return txDate.getMonth() === month &&
                 txDate.getFullYear() === year &&
-                tx.amount == profile.pro_labore_amount &&
+                tx.amount == proLaboreAmountCents &&
                 (
                     (tx.context === 'business' && tx.type === 'expense' && tx.description === 'Pró-Labore (Saída PJ)') ||
                     (tx.context === 'personal' && tx.type === 'income' && tx.description === 'Pró-Labore (Entrada PF)')
@@ -67,6 +73,9 @@ export const TransactionService = {
 
         // 3. Create Transactions
         console.log('Generating Pró-Labore Transactions...');
+
+        // Note: this.create() expects amount in REAIS (it converts to centavos internally)
+        // So we pass the original pro_labore_amount
 
         // Out Business
         const outTx = {
@@ -95,7 +104,8 @@ export const TransactionService = {
     },
 
     async checkRecurringTransactions() {
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) return;
 
         const { data: rules } = await supabase
@@ -150,19 +160,27 @@ export const TransactionService = {
     },
 
     async fetchAll() {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        try {
+            const session = await SupabaseService.getSession();
+            const user = session?.user;
+            if (!user) return;
 
-        const { data, error } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('date', { ascending: false });
+            const { data, error } = await supabase
+                .from('transactions')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('date', { ascending: false });
 
-        if (!error && data) {
-            this.transactions = data;
-            this.saveCache();
-            this.notifyListeners();
+            if (error) throw error;
+
+            if (data) {
+                this.transactions = data;
+                this.saveCache();
+                this.notifyListeners();
+            }
+        } catch (error) {
+            console.error('TransactionService fetchAll Error:', error);
+            // We do not throw here to allow app to continue with cached/empty data
         }
     },
 
@@ -171,7 +189,8 @@ export const TransactionService = {
     },
 
     async getRecurringDefinitions() {
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) return [];
 
         const { data, error } = await supabase
@@ -217,7 +236,8 @@ export const TransactionService = {
     },
 
     async create(transaction) {
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) throw new Error('User not logged in');
 
         // Convert Amount to Cents (Integer)
@@ -230,15 +250,19 @@ export const TransactionService = {
 
         const newTx = {
             id: crypto.randomUUID(),
-            ...transaction,
+            type: transaction.type,
+            description: transaction.description,
             amount: amountInCents, // Store as Cents
+            date: transaction.date || new Date().toISOString(),
+            category_id: transaction.categoryId || transaction.category_id || null, // Map camelCase to snake_case
+            account_id: transaction.account_id || null,
             user_id: user.id,
             context: transaction.context || 'personal', // 'personal' or 'business'
             partner_id: transaction.partner_id || null,
             status: transaction.status || 'paid', // 'paid' or 'pending'
+            payment_method: transaction.payment_method || 'money',
             classification: transaction.classification || null, // 'fixed_operational', etc.
             attachment_url: transaction.attachment_url || null,
-            date: transaction.date || new Date().toISOString(),
             created_at: new Date().toISOString()
         };
 
@@ -263,7 +287,8 @@ export const TransactionService = {
         const installmentCents = Math.floor(totalCents / installmentsCount);
         const remainderCents = totalCents % installmentsCount;
 
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) throw new Error('User not logged in');
 
         const baseDate = new Date(transaction.date);
@@ -331,6 +356,11 @@ export const TransactionService = {
         const dbUpdates = { ...updates };
         if (updates.amount !== undefined) {
             dbUpdates.amount = Math.round(parseFloat(updates.amount) * 100);
+        }
+        // Map categoryId to category_id for Supabase
+        if (updates.categoryId !== undefined) {
+            dbUpdates.category_id = updates.categoryId;
+            delete dbUpdates.categoryId;
         }
 
         const updatedTx = { ...this.transactions[index], ...dbUpdates, updated_at: new Date().toISOString() };
@@ -403,16 +433,23 @@ export const TransactionService = {
         let categories = StoreService.get(CACHE_KEY_CATS);
 
         if (!categories || categories.length === 0) {
-            const { data } = await supabase
-                .from('categories')
-                .select('*')
-                .order('name');
+            try {
+                const { data, error } = await supabase
+                    .from('categories')
+                    .select('*')
+                    .order('name');
 
-            if (data) {
-                categories = data;
-                StoreService.set(CACHE_KEY_CATS, categories);
-            } else {
-                categories = [];
+                if (error) throw error;
+
+                if (data) {
+                    categories = data;
+                    StoreService.set(CACHE_KEY_CATS, categories);
+                } else {
+                    categories = [];
+                }
+            } catch (error) {
+                console.error('TransactionService getCategories Error:', error);
+                return []; // Return empty array on error
             }
         }
         return categories;
@@ -488,3 +525,5 @@ export const TransactionService = {
         return { flow, totalReceivable, totalPayable };
     }
 };
+
+

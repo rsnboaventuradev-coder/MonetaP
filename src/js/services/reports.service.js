@@ -1,4 +1,5 @@
 import { TransactionService } from './transaction.service.js';
+import { Toast } from '../utils/toast.js';
 
 export const ReportsService = {
     /**
@@ -16,7 +17,7 @@ export const ReportsService = {
         });
 
         if (transactions.length === 0) {
-            alert('Nenhuma transação encontrada para este período.');
+            Toast.show('Nenhuma transação encontrada para este período.', 'warning');
             return;
         }
 
@@ -50,3 +51,5 @@ export const ReportsService = {
         document.body.removeChild(link);
     }
 };
+
+

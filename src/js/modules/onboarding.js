@@ -12,18 +12,29 @@ export const OnboardingModule = {
     },
 
     async init() {
+        console.log('Onboarding: Checking status...');
+
         // Check if onboarding is needed
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+            console.log('Onboarding: No user found.');
+            return;
+        }
 
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
             .from('profiles')
             .select('onboarding_completed')
             .eq('id', user.id)
             .maybeSingle();
 
-        if (profile && !profile.onboarding_completed) {
+        console.log('Onboarding: Profile fetched', profile, error);
+
+        // If profile is missing (trigger failed) OR onboarding not completed:
+        if (!profile || !profile.onboarding_completed) {
+            console.log('Onboarding: Starting Wizard...');
             this.renderWizard();
+        } else {
+            console.log('Onboarding: Completed previously.');
         }
     },
 
@@ -32,9 +43,9 @@ export const OnboardingModule = {
         overlay.id = 'onboarding-overlay';
         overlay.className = 'fixed inset-0 z-[100] bg-brand-bg flex items-center justify-center p-4 animate-fade-in';
         overlay.innerHTML = `
-            <div class="bg-brand-surface border border-white/10 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden relative">
+            <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden relative">
                 <!-- Progress Bar -->
-                <div class="h-1 bg-white/5 w-full">
+                <div class="h-1 bg-brand-surface-light w-full">
                     <div id="onb-progress" class="h-full bg-brand-gold transition-all duration-500" style="width: 0%"></div>
                 </div>
 
@@ -53,10 +64,10 @@ export const OnboardingModule = {
             render: () => `
                 <div class="flex-1 flex flex-col justify-center items-center text-center space-y-6 animate-fade-in-up">
                     <div class="w-24 h-24 bg-brand-gold/10 rounded-full flex items-center justify-center text-5xl mb-4 shadow-custom">🚀</div>
-                    <h2 class="text-3xl font-bold text-white">Bem-vindo ao Moneta</h2>
-                    <p class="text-gray-400 text-lg max-w-sm">Vamos organizar o seu futuro. Responda a algumas perguntas rápidas para personalizar sua experiência.</p>
+                    <h2 class="text-3xl font-bold text-brand-text-primary">Bem-vindo ao Moneta</h2>
+                    <p class="text-brand-text-secondary text-lg max-w-sm">Vamos organizar o seu futuro. Responda a algumas perguntas rápidas para personalizar sua experiência.</p>
                     <button onclick="window.app.nextStep()" class="bg-brand-gold text-brand-darker font-bold py-4 px-10 rounded-xl text-lg shadow-glow-gold hover:scale-105 transition-transform">Começar Jornada</button>
-                    <button onclick="window.app.skipOnboarding()" class="text-xs text-gray-500 font-bold hover:text-white uppercase tracking-widest mt-4">Pular (Configurar depois)</button>
+                    <button onclick="window.app.skipOnboarding()" class="text-xs text-brand-text-secondary font-bold hover:text-brand-text-primary uppercase tracking-widest mt-4">Pular (Configurar depois)</button>
                 </div>
             `
         },
@@ -67,7 +78,7 @@ export const OnboardingModule = {
                 <div class="space-y-6 animate-fade-in-up">
                     <div class="text-center mb-8">
                         <div class="text-4xl mb-2">🤔</div>
-                        <h3 class="text-2xl font-bold text-white">Como descreveria sua vida financeira hoje?</h3>
+                        <h3 class="text-2xl font-bold text-brand-text-primary">Como descreveria sua vida financeira hoje?</h3>
                     </div>
                     
                     <div class="grid grid-cols-1 gap-3">
@@ -87,7 +98,7 @@ export const OnboardingModule = {
                 <div class="space-y-6 animate-fade-in-up">
                     <div class="text-center mb-8">
                         <div class="text-4xl mb-2">🎯</div>
-                        <h3 class="text-2xl font-bold text-white">Qual seu principal objetivo agora?</h3>
+                        <h3 class="text-2xl font-bold text-brand-text-primary">Qual seu principal objetivo agora?</h3>
                     </div>
                     
                     <div class="grid grid-cols-1 gap-3">
@@ -107,7 +118,7 @@ export const OnboardingModule = {
                 <div class="space-y-6 animate-fade-in-up">
                     <div class="text-center mb-8">
                         <div class="text-4xl mb-2">📚</div>
-                        <h3 class="text-2xl font-bold text-white">Qual seu nível de conhecimento?</h3>
+                        <h3 class="text-2xl font-bold text-brand-text-primary">Qual seu nível de conhecimento?</h3>
                     </div>
                     
                     <div class="grid grid-cols-1 gap-3">
@@ -125,18 +136,18 @@ export const OnboardingModule = {
             render: () => `
                 <div class="space-y-6 animate-fade-in-up">
                     <div class="text-center mb-6">
-                        <h3 class="text-2xl font-bold text-white">Para finalizar, alguns números 🔢</h3>
+                        <h3 class="text-2xl font-bold text-brand-text-primary">Para finalizar, alguns números 🔢</h3>
                     </div>
                     
                     <div class="space-y-4">
                         <div>
                             <label class="block text-xs font-bold text-brand-gold uppercase mb-2">Renda Mensal (Aprox.)</label>
-                            <input type="number" id="onb-income" class="w-full bg-brand-bg border border-white/10 rounded-xl p-4 text-white text-lg focus:border-brand-gold outline-none" placeholder="Ex: 5000">
+                            <input type="number" id="onb-income" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary text-lg focus:border-brand-gold outline-none" placeholder="Ex: 5000">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-brand-gold uppercase mb-2">Custo de Vida Mensal</label>
-                            <input type="number" id="onb-cost" class="w-full bg-brand-bg border border-white/10 rounded-xl p-4 text-white text-lg focus:border-brand-gold outline-none" placeholder="Ex: 3000">
-                            <p class="text-[10px] text-gray-500 mt-2">Isso ajuda a calcular sua reserva de segurança.</p>
+                            <input type="number" id="onb-cost" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary text-lg focus:border-brand-gold outline-none" placeholder="Ex: 3000">
+                            <p class="text-[10px] text-brand-text-secondary mt-2">Isso ajuda a calcular sua reserva de segurança.</p>
                         </div>
                     </div>
                 </div>
@@ -155,28 +166,28 @@ export const OnboardingModule = {
             id: 'safety',
             render: () => `
                 <div class="space-y-6 animate-fade-in-up">
-                    <h3 class="text-2xl font-bold text-white mb-2">Segurança 🛡️</h3>
-                    <p class="text-gray-400">Sua Reserva de Emergência é seu colchão. Quantos meses de custo de vida te deixariam tranquilo?</p>
+                    <h3 class="text-2xl font-bold text-brand-text-primary mb-2">Segurança 🛡️</h3>
+                    <p class="text-brand-text-secondary">Sua Reserva de Emergência é seu colchão. Quantos meses de custo de vida te deixariam tranquilo?</p>
                     
                     <div class="grid grid-cols-3 gap-3">
-                        <button onclick="window.app.setMonths(3, this)" class="month-opt bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 transition text-center group">
-                            <span class="block text-2xl font-bold text-white mb-1">3</span>
-                            <span class="text-xs text-gray-400 group-hover:text-white uppercase">Meses</span>
+                        <button onclick="window.app.setMonths(3, this)" class="month-opt bg-brand-surface-light border border-brand-border p-4 rounded-xl hover:bg-brand-surface-light transition text-center group">
+                            <span class="block text-2xl font-bold text-brand-text-primary mb-1">3</span>
+                            <span class="text-xs text-brand-text-secondary group-hover:text-brand-text-primary uppercase">Meses</span>
                         </button>
                         <button onclick="window.app.setMonths(6, this)" class="month-opt bg-brand-gold/20 border border-brand-gold p-4 rounded-xl hover:bg-brand-gold/30 transition text-center group ring-2 ring-brand-gold ring-offset-2 ring-offset-[#111]">
                             <span class="block text-2xl font-bold text-brand-gold mb-1">6</span>
-                            <span class="text-xs text-brand-gold/80 group-hover:text-white uppercase">Meses</span>
+                            <span class="text-xs text-brand-gold/80 group-hover:text-brand-text-primary uppercase">Meses</span>
                         </button>
-                        <button onclick="window.app.setMonths(12, this)" class="month-opt bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 transition text-center group">
-                            <span class="block text-2xl font-bold text-white mb-1">12</span>
-                            <span class="text-xs text-gray-400 group-hover:text-white uppercase">Meses</span>
+                        <button onclick="window.app.setMonths(12, this)" class="month-opt bg-brand-surface-light border border-brand-border p-4 rounded-xl hover:bg-brand-surface-light transition text-center group">
+                            <span class="block text-2xl font-bold text-brand-text-primary mb-1">12</span>
+                            <span class="text-xs text-brand-text-secondary group-hover:text-brand-text-primary uppercase">Meses</span>
                         </button>
                     </div>
 
                     <div class="pt-4">
-                        <label class="flex items-center gap-3 p-4 bg-white/5 rounded-xl cursor-pointer">
-                            <input type="checkbox" id="onb-has-fund" class="w-5 h-5 rounded border-gray-600 text-brand-gold focus:ring-brand-gold bg-gray-700">
-                            <span class="text-sm text-gray-200">Já possuo esse valor investido em liquidez.</span>
+                        <label class="flex items-center gap-3 p-4 bg-brand-surface-light rounded-xl cursor-pointer">
+                            <input type="checkbox" id="onb-has-fund" class="w-5 h-5 rounded border-gray-600 text-brand-gold focus:ring-brand-gold bg-brand-surface-light">
+                            <span class="text-sm text-brand-text-primary">Já possuo esse valor investido em liquidez.</span>
                         </label>
                     </div>
                 </div>
@@ -195,9 +206,9 @@ export const OnboardingModule = {
         return `
             <label class="cursor-pointer relative group">
                 <input type="radio" name="${group}" value="${value}" class="peer sr-only">
-                <div class="p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 peer-checked:bg-brand-gold/20 peer-checked:border-brand-gold peer-checked:shadow-glow-gold transition-all flex items-center space-x-4">
+                <div class="p-4 bg-brand-surface-light border border-brand-border rounded-xl hover:bg-brand-surface-light peer-checked:bg-brand-gold/20 peer-checked:border-brand-gold peer-checked:shadow-glow-gold transition-all flex items-center space-x-4">
                     <span class="text-2xl grayscale group-hover:grayscale-0 peer-checked:grayscale-0">${icon}</span>
-                    <span class="font-medium text-white">${label}</span>
+                    <span class="font-medium text-brand-text-primary">${label}</span>
                     <div class="w-4 h-4 rounded-full border border-white/30 ml-auto peer-checked:bg-brand-gold peer-checked:border-brand-gold"></div>
                 </div>
             </label>
@@ -225,13 +236,13 @@ export const OnboardingModule = {
         // Add navigation if not intro
         if (step.id !== 'intro') {
             html += `
-    < div class="mt-auto pt-8 flex justify-between items-center" >
-                    <button onclick="window.app.prevStep()" class="text-gray-500 hover:text-white font-bold text-sm px-4">Voltar</button>
-                    <button onclick="window.app.nextStep()" class="bg-white text-brand-darker font-bold py-3 px-8 rounded-full shadow hover:bg-gray-200 transition">
+                <div class="mt-auto pt-8 flex justify-between items-center">
+                    <button onclick="window.app.prevStep()" class="text-brand-text-secondary hover:text-brand-text-primary font-bold text-sm px-4">Voltar</button>
+                    <button onclick="window.app.nextStep()" class="bg-white text-brand-darker font-bold py-3 px-8 rounded-full shadow hover:bg-brand-border transition">
                         ${stepIndex === this.steps.length - 1 ? 'Finalizar' : 'Próximo'}
                     </button>
-               </div >
-    `;
+                </div>
+            `;
         }
 
         container.innerHTML = html;
@@ -307,7 +318,11 @@ window.app.prevStep = () => {
 };
 
 window.app.skipOnboarding = async () => {
-    if (confirm('Tem certeza? O modo "Pente Fino" ajuda a personalizar o app.')) {
+    const confirmed = await window.ModalUtils.confirm(
+        'Pular Onboarding',
+        'Tem certeza? O modo "Pente Fino" ajuda a personalizar o app.'
+    );
+    if (confirmed) {
         const { data: { user } } = await supabase.auth.getUser();
         await supabase.from('profiles').update({ onboarding_completed: true }).eq('id', user.id);
         document.getElementById('onboarding-overlay').remove();
@@ -316,23 +331,23 @@ window.app.skipOnboarding = async () => {
 
 window.app.setMonths = (m, btn) => {
     document.querySelectorAll('.month-opt').forEach(b => {
-        b.className = 'month-opt bg-white/5 border border-white/10 p-4 rounded-xl hover:bg-white/10 transition text-center group';
-        b.querySelector('span:first-child').className = 'block text-2xl font-bold text-white mb-1';
-        b.querySelector('span:last-child').className = 'text-xs text-gray-400 group-hover:text-white uppercase';
+        b.className = 'month-opt bg-brand-surface-light border border-brand-border p-4 rounded-xl hover:bg-brand-surface-light transition text-center group';
+        b.querySelector('span:first-child').className = 'block text-2xl font-bold text-brand-text-primary mb-1';
+        b.querySelector('span:last-child').className = 'text-xs text-brand-text-secondary group-hover:text-brand-text-primary uppercase';
     });
 
     // Select clicked
     btn.className = 'month-opt bg-brand-gold/20 border border-brand-gold p-4 rounded-xl hover:bg-brand-gold/30 transition text-center group ring-2 ring-brand-gold ring-offset-2 ring-offset-[#111]';
     btn.querySelector('span:first-child').className = 'block text-2xl font-bold text-brand-gold mb-1';
-    btn.querySelector('span:last-child').className = 'text-xs text-brand-gold/80 group-hover:text-white uppercase';
+    btn.querySelector('span:last-child').className = 'text-xs text-brand-gold/80 group-hover:text-brand-text-primary uppercase';
 
     window.app.onbData.emergency_months = m;
 };
 
 window.app.setLevel = (l, btn) => {
     document.querySelectorAll('.lvl-opt').forEach(b => {
-        b.className = 'lvl-opt w-full bg-white/5 border border-white/10 p-4 rounded-xl flex items-center gap-4 text-left hover:bg-white/10 transition';
-        b.querySelector('.w-10').className = 'w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white font-bold';
+        b.className = 'lvl-opt w-full bg-brand-surface-light border border-brand-border p-4 rounded-xl flex items-center gap-4 text-left hover:bg-brand-surface-light transition';
+        b.querySelector('.w-10').className = 'w-10 h-10 rounded-full bg-brand-surface-light flex items-center justify-center text-brand-text-primary font-bold';
     });
 
     btn.className = 'lvl-opt w-full bg-brand-gold/20 border border-brand-gold p-4 rounded-xl flex items-center gap-4 text-left transition ring-2 ring-brand-gold ring-offset-2 ring-offset-[#111]';
@@ -340,3 +355,6 @@ window.app.setLevel = (l, btn) => {
 
     window.app.onbData.knowledge_level = l;
 };
+
+
+

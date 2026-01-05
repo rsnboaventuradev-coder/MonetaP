@@ -12,31 +12,89 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="/manifest.json">
+    <style>
+        :root {
+            /* LIGHT MODE (Premium) */
+            --brand-bg: #f8fafc;
+            /* Slate 50 */
+            --brand-surface: #ffffff;
+            /* White */
+            --brand-surface-light: #f1f5f9;
+            /* Slate 100 */
+            --brand-text-primary: #0f172a;
+            /* Slate 900 */
+            --brand-text-secondary: #475569;
+            /* Slate 600 */
+            --brand-border: #e2e8f0;
+            /* Slate 200 */
+            --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -1px rgb(0 0 0 / 0.03);
+            /* Softer shadow */
+        }
+
+        .dark {
+            /* DARK MODE (True Dark) */
+            --brand-bg: #0a0a0a;
+            /* Neutral 950 (Almost Black) */
+            --brand-surface: #171717;
+            /* Neutral 900 */
+            --brand-surface-light: #262626;
+            /* Neutral 800 */
+            --brand-text-primary: #fafafa;
+            /* Neutral 50 */
+            --brand-text-secondary: #a3a3a3;
+            /* Neutral 400 */
+            --brand-border: #262626;
+            /* Neutral 800 */
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
+        body {
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+    </style>
     <script>
         tailwind.config = {
+            darkMode: 'class', // Enable class-based dark mode
             theme: {
                 extend: {
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                     },
                     colors: {
-                        'brand-bg': '#090a11', // Deep rich dark
-                        'brand-surface': '#13141f', // Slightly lighter surface
-                        'brand-surface-light': '#1d1e2c', // Highlight
-                        'brand-green': '#059669', // Emerald 600
-                        'brand-green-light': '#34d399', // Emerald 400
-                        'brand-gold': '#d97706', // Amber 600
-                        'brand-gold-light': '#fbbf24', // Amber 400
-                        'brand-red': '#e11d48', // Rose 600
-                        'brand-red-light': '#fb7185', // Rose 400
+                        'brand-bg': 'var(--brand-bg)',
+                        'brand-surface': 'var(--brand-surface)',
+                        'brand-surface-light': 'var(--brand-surface-light)',
+                        'brand-text-primary': 'var(--brand-text-primary)',
+                        'brand-text-secondary': 'var(--brand-text-secondary)',
+                        'brand-border': 'var(--brand-border)',
+
+                        // Brand Colors
+                        'brand-green': '#10b981', // Emerald 500 (Brighter for dark mode visibility)
+                        'brand-green-light': '#34d399',
+                        'brand-gold': '#f59e0b', // Amber 500
+                        'brand-gold-light': '#fbbf24',
+                        'brand-red': '#ef4444', // Red 500
+                        'brand-red-light': '#f87171',
                     },
                     boxShadow: {
-                        'glow-green': '0 0 20px -5px rgba(5, 150, 105, 0.3)',
-                        'glow-gold': '0 0 20px -5px rgba(217, 119, 6, 0.3)',
+                        'glow-green': '0 0 20px -5px rgba(16, 185, 129, 0.15)',
+                        'glow-gold': '0 0 20px -5px rgba(245, 158, 11, 0.15)',
+                        'card-sm': 'var(--shadow-card)',
                     }
                 }
             }
         }
+
+        // Prevent FOUC (Flash of Unstyled Content)
+        try {
+            const savedTheme = localStorage.getItem('theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        } catch (e) { }
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -48,9 +106,30 @@
     </script>
 </head>
 
-<body class="bg-brand-bg text-gray-200 antialiased h-full">
+<body class="bg-brand-bg text-brand-text-primary antialiased h-full">
 
     <div id="app-container" class="h-full flex flex-col">
+        <!-- App Header with Logo -->
+        <header
+            class="bg-brand-surface/80 backdrop-blur-lg border-b border-brand-border px-6 py-3 flex items-center justify-between safe-area-top z-40">
+            <div class="flex items-center gap-3">
+                <img src="/logo.png" alt="Moneta" class="w-10 h-10">
+                <div>
+                    <h1 class="text-lg font-bold text-brand-text-primary">Moneta</h1>
+                    <p class="text-xs text-brand-text-secondary">Controle Financeiro</p>
+                </div>
+            </div>
+            <button id="privacy-toggle" class="p-2 rounded-lg hover:bg-brand-surface-light transition-colors"
+                title="Modo Privacidade">
+                <svg class="w-5 h-5 text-brand-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+            </button>
+        </header>
+
         <!-- Main content -->
         <main id="main-content" class="h-full overflow-y-auto pb-20 flex-1"></main>
 

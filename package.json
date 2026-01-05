@@ -1,18 +1,30 @@
 {
   "name": "moneta-app",
   "version": "1.0.0",
-  "description": "Aplicativo de Controle Financeiro",
-  "main": "main.js",
+  "description": "Aplicativo de Controle Financeiro - Desktop e Mobile",
+  "main": "main.cjs",
+  "author": "Moneta Team",
+  "license": "ISC",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "start": "npm run build && electron .",
+    "electron:dev": "electron .",
     "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:linux": "npm run build && electron-builder --linux",
     "android:sync": "npm run build && npx cap sync android"
   },
-  "keywords": [],
-  "author": "Seu Nome Aqui",
-  "license": "ISC",
+  "keywords": [
+    "finance",
+    "money",
+    "budget",
+    "investment",
+    "desktop",
+    "electron"
+  ],
   "devDependencies": {
     "@capacitor/android": "^6.0.0",
     "@capacitor/cli": "^6.0.0",
@@ -21,28 +33,70 @@
     "electron-builder": "^24.13.3",
     "vite": "^5.2.13"
   },
+  "dependencies": {
+    "@capacitor/haptics": "^6.0.3",
+    "@capacitor/local-notifications": "^8.0.0",
+    "@supabase/supabase-js": "^2.88.0",
+    "chart.js": "^4.5.1"
+  },
   "build": {
-    "appId": "com.seu-nome.moneta",
-    "productName": "Moneta App",
+    "appId": "com.moneta.app",
+    "productName": "Moneta",
+    "copyright": "Copyright © 2025 Moneta Team",
     "files": [
       "dist/**/*",
-      "main.js"
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
     ],
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "win": {
-      "target": "nsis",
-      "icon": "assets/images/logo.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Moneta"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "assets/images/logo.icns"
-    }
-  },
-  "dependencies": {
-    "@capacitor/haptics": "^8.0.0",
-    "@capacitor/local-notifications": "^8.0.0",
-    "@supabase/supabase-js": "^2.88.0"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.finance",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Finance",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": null
   }
 }

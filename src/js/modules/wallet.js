@@ -1,7 +1,12 @@
 import { TransactionService } from '../services/transaction.service.js';
+import { AccountsService } from '../services/accounts.service.js';
 import { CurrencyMask } from '../utils/mask.js';
 import { AuthService } from './auth.js';
 import { HapticService } from '../services/haptics.service.js';
+import { Toast } from '../utils/toast.js';
+import { CategoryBudgetService } from '../services/category_budgets.service.js';
+import { CreditCardService } from '../services/credit-card.service.js';
+import Chart from 'chart.js/auto';
 
 export const WalletModule = {
     state: {
@@ -13,7 +18,8 @@ export const WalletModule = {
         filters: {
             startDate: null,
             endDate: null,
-            type: null // 'income' | 'expense' | null
+            type: null, // 'income' | 'expense' | null
+            context: null // 'personal' | 'business' | null
         },
         transactionToDelete: null // Para confirmação de exclusão
     },
@@ -21,71 +27,82 @@ export const WalletModule = {
     unsubscribe: null,
 
     async init() {
+        // State Guard
+        if (window.app.currentView !== 'wallet') return;
+
         // Subscribe to TransactionService
         if (this.unsubscribe) this.unsubscribe();
         this.unsubscribe = TransactionService.subscribe((transactions) => {
+            if (window.app.currentView !== 'wallet') return; // Guard
             this.state.transactions = transactions;
-            // Only re-render if visible
             if (document.getElementById('walletTransactionsList')) {
                 this.renderTransactionsList();
                 this.updateBalanceDisplay();
+                this.renderSummaryCharts(); // Update charts on transaction change
             }
         });
 
-        // Initial Fetch if empty
+        // Initial Fetch
         if (TransactionService.transactions.length === 0) {
             await TransactionService.init();
         } else {
             this.state.transactions = TransactionService.transactions;
         }
+
+        // Initialize AccountsService
+        await AccountsService.init();
+
+        // Initialize CategoryBudgetService for budget alerts
+        await CategoryBudgetService.init();
     },
 
-    render() {
+    async render() {
         const container = document.getElementById('main-content');
         if (!container) return;
 
-        // Ensure listeners are active
-        this.init();
+        // 1. Initial State Guard
+        if (window.app.currentView !== 'wallet') return;
 
-        // Ensure current date is set
+        // 2. Ensure current date
         if (!this.state.currentDate) this.state.currentDate = new Date();
 
+        // 3. Render Interface (SHELL FIRST)
         const monthYear = this.state.currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
         const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
         container.innerHTML = `
-            <div class="flex flex-col min-h-full bg-brand-bg safe-area-top">
-                <!-- HEADER -->
-                <div class="px-6 pt-6 flex justify-between items-center bg-brand-bg sticky top-0 z-20 pb-4 border-b border-white/5 backdrop-blur-md">
-                    <div>
-                         <p class="text-xs text-gray-400 font-medium uppercase tracking-wider">Seu Dinheiro</p>
-                         <h1 class="text-2xl font-bold text-white leading-none mt-1">Carteira</h1>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <button onclick="window.app.togglePrivacy()" class="text-gray-400 hover:text-white transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                        </button>
-                    </div>
+        <div class="flex flex-col min-h-full bg-brand-bg safe-area-top">
+            <!-- HEADER -->
+            <div class="px-6 pt-6 flex justify-between items-center bg-brand-bg sticky top-0 z-20 pb-4 border-b border-brand-border backdrop-blur-md">
+                <div>
+                    <p class="text-xs text-brand-text-secondary font-medium uppercase tracking-wider">Seu Dinheiro</p>
+                    <h1 class="text-2xl font-bold text-brand-text-primary leading-none mt-1">Carteira</h1>
                 </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="window.app.togglePrivacy()" class="text-brand-text-secondary hover:text-brand-text-primary transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
 
-                <!-- TOTAL BALANCE & FILTERS -->
-                <div class="px-6 py-6 bg-brand-surface border-b border-white/5 space-y-4">
-                    
-                  <div class="flex items-center gap-4 animate-fade-in-up" style="animation-delay: 0.1s;">
+            <!-- TOTAL BALANCE & FILTERS -->
+            <div class="px-6 py-6 bg-brand-surface border-b border-brand-border space-y-4">
+
+                <div class="flex items-center gap-4 animate-fade-in-up" style="animation-delay: 0.1s;">
                     <!-- Date Selector (Month) -->
-                    <div class="flex items-center bg-brand-surface rounded-xl p-1 border border-white/5">
-                        <button id="prevMonthBtn" class="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition">
+                    <div class="flex items-center bg-brand-surface rounded-xl p-1 border border-brand-border">
+                        <button id="prevMonthBtn" class="p-2 hover:bg-brand-surface-light rounded-lg text-brand-text-secondary hover:text-brand-text-primary transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                             </svg>
                         </button>
-                        <span id="currentMonthLabel" class="w-32 text-center text-sm font-bold text-white uppercase tracking-wide">
+                        <span id="currentMonthLabel" class="w-32 text-center text-sm font-bold text-brand-text-primary uppercase tracking-wide">
                             Julho 2024
                         </span>
-                        <button id="nextMonthBtn" class="p-2 hover:bg-white/5 rounded-lg text-gray-400 hover:text-white transition">
+                        <button id="nextMonthBtn" class="p-2 hover:bg-brand-surface-light rounded-lg text-brand-text-secondary hover:text-brand-text-primary transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                             </svg>
@@ -95,36 +112,74 @@ export const WalletModule = {
                     <!-- Search Bar -->
                     <div class="relative flex-1 group hidden md:block">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 group-focus-within:text-brand-gold transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-brand-text-secondary group-focus-within:text-brand-gold transition" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
-                        <input type="text" id="transactionDetailsSearch" 
-                            class="w-full bg-brand-surface border border-white/5 text-gray-300 text-sm rounded-xl focus:ring-1 focus:ring-brand-gold focus:border-brand-gold block pl-10 p-2.5 transition outline-none placeholder-gray-600" 
+                        <input type="text" id="transactionDetailsSearch"
+                            class="w-full bg-brand-surface border border-brand-border text-brand-text-secondary text-sm rounded-xl focus:ring-1 focus:ring-brand-gold focus:border-brand-gold block pl-10 p-2.5 transition outline-none placeholder-gray-600"
                             placeholder="Buscar transação...">
                     </div>
-                     <!-- Mobile Search Trigger (Optional, kept simple for now) -->
+                    <!-- Mobile Search Trigger (Optional, kept simple for now) -->
                 </div>
                 <div class="px-6 space-y-6 pt-6 mb-6">
-                     <!-- View Toggler -->
-                    <div class="bg-white/5 p-1 rounded-xl flex gap-1">
+                    <!-- View Toggler -->
+                    <div class="bg-brand-surface-light p-1 rounded-xl flex gap-1">
                         <button onclick="window.app.WalletModule.switchView('transactions')" id="viewBtn-transactions" class="flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all">
                             Transações
                         </button>
-                        <button onclick="window.app.WalletModule.switchView('subscriptions')" id="viewBtn-subscriptions" class="flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all">
+                        <button onclick="window.app.WalletModule.switchView('subscriptions')" id="viewBtn-subscriptions" class="flex-1 py-2 rounded-lg text-sm font-bold text-brand-text-secondary hover:text-brand-text-primary transition-all">
                             Assinaturas
                         </button>
                     </div>
 
                     <div>
-                        <p class="text-gray-400 text-xs font-medium mb-1">Saldo do Mês</p>
-                        <h2 id="walletTotalBalance" class="text-4xl font-black text-white tracking-tight value-sensitive">R$ ...</h2>
+                        <p class="text-brand-text-secondary text-xs font-medium mb-1">Saldo do Mês</p>
+                        <h2 id="walletTotalBalance" class="text-4xl font-black text-brand-text-primary tracking-tight value-sensitive">R$ ...</h2>
                     </div>
 
                     <div id="filterTabsContainer" class="flex gap-2 overflow-x-auto scrollbar-hide">
-                        <button class="filter-tab active px-4 py-2 rounded-full text-xs font-bold bg-white/10 text-white whitespace-nowrap border border-white/5 transition hover:bg-white/20" data-type="all">Todos</button>
+                        <button class="filter-tab active px-4 py-2 rounded-full text-xs font-bold bg-brand-surface-light text-brand-text-primary whitespace-nowrap border border-brand-border transition hover:bg-white/20" data-type="all">Todos</button>
                         <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-green/10 text-brand-green whitespace-nowrap border border-brand-green/20 transition hover:bg-brand-green/20" data-type="income">Entradas</button>
                         <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-red/10 text-brand-red whitespace-nowrap border border-brand-red/20 transition hover:bg-brand-red/20" data-type="expense">Saídas</button>
+                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 whitespace-nowrap border border-blue-500/20 transition hover:bg-blue-500/20" data-context="personal">👤 PF</button>
+                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 whitespace-nowrap border border-purple-500/20 transition hover:bg-purple-500/20" data-context="business">💼 PJ</button>
+                    </div>
+                </div>
+
+                <!-- WALLET SUMMARY CHARTS -->
+                <div id="walletSummaryCharts" class="px-6 py-4 space-y-4">
+                    <!-- Quick Stats Cards -->
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="bg-brand-green/10 rounded-xl p-3 text-center border border-brand-green/20">
+                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Receitas</p>
+                            <p id="walletTotalIncome" class="text-lg font-black text-brand-green value-sensitive">R$ 0</p>
+                        </div>
+                        <div class="bg-brand-red/10 rounded-xl p-3 text-center border border-brand-red/20">
+                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Despesas</p>
+                            <p id="walletTotalExpenses" class="text-lg font-black text-brand-red value-sensitive">R$ 0</p>
+                        </div>
+                        <div class="bg-brand-gold/10 rounded-xl p-3 text-center border border-brand-gold/20">
+                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Saldo</p>
+                            <p id="walletNetBalance" class="text-lg font-black text-brand-gold value-sensitive">R$ 0</p>
+                        </div>
+                    </div>
+                    <!-- Charts Row -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Expense Categories Chart -->
+                        <div class="bg-brand-surface rounded-2xl p-4 border border-brand-border">
+                            <h4 class="text-[10px] font-bold text-brand-text-secondary uppercase tracking-wide mb-3">Top Despesas</h4>
+                            <div id="walletExpenseChartContainer" class="relative h-32">
+                                <canvas id="walletExpenseChart"></canvas>
+                            </div>
+                        </div>
+                        <!-- Income Sources Chart -->  
+                        <div class="bg-brand-surface rounded-2xl p-4 border border-brand-border">
+                            <h4 class="text-[10px] font-bold text-brand-text-secondary uppercase tracking-wide mb-3">Top Receitas</h4>
+                            <div id="walletIncomeChartContainer" class="relative h-32">
+                                <canvas id="walletIncomeChart"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -138,135 +193,170 @@ export const WalletModule = {
                     <i class="fas fa-spinner fa-spin text-brand-green text-2xl"></i>
                 </div>
                 <div class="px-6 pb-24 text-center">
-                    <button id="loadMoreTransactionsBtn" class="text-sm font-bold text-gray-500 hover:text-white transition py-2 px-4 hidden">
+                    <button id="loadMoreTransactionsBtn" class="text-sm font-bold text-brand-text-secondary hover:text-brand-text-primary transition py-2 px-4 hidden">
                         Carregar Mais
                     </button>
                 </div>
 
                 <!-- FAB ADD BUTTON -->
-                <button id="addTransactionBtn" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-green rounded-full shadow-glow-green text-white flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition z-30">
+                <button id="addTransactionBtn" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-green rounded-full shadow-glow-green text-brand-text-primary flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition z-30">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
                 </button>
             </div>
-            
+
             <!-- MODAL TRANSACTION -->
-             <div id="transactionModal" class="fixed inset-0 z-50 hidden">
+            <div id="transactionModal" class="fixed inset-0 z-[200] hidden">
                 <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="window.app.WalletModule ? window.app.WalletModule.closeTransactionModal() : null"></div>
-                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-white/10 rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-gray-700/50 rounded-full mx-auto mb-6 shrink-0"></div>
+                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-brand-border rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
+                    <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6 shrink-0"></div>
                     <div class="flex justify-between items-center mb-6">
-                        <h3 class="modal-title text-xl font-bold text-white">Nova Transação</h3>
-                        <button onclick="window.app.WalletModule.closeTransactionModal()" class="bg-white/5 rounded-full p-2 text-gray-400 hover:text-white transition">
+                        <h3 class="modal-title text-xl font-bold text-brand-text-primary">Nova Transação</h3>
+                        <button onclick="window.app.WalletModule.closeTransactionModal()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                         </button>
                     </div>
-                    
-                    <form id="transactionForm" class="space-y-6 flex-1 overflow-y-auto pr-1">
-                         <div>
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Valor</label>
-                            <input type="text" inputmode="numeric" id="amountInput" name="amount" required class="w-full bg-transparent text-4xl font-black text-white border-0 p-0 focus:ring-0 placeholder-gray-700" placeholder="R$ 0,00">
+
+                    <form id="transactionForm" class="flex-1 overflow-y-auto pr-1 flex flex-col gap-6">
+                        <div class="bg-[#27272a] rounded-xl p-4">
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
+                            <input type="text" inputmode="numeric" id="amountInput" name="amount" data-currency required class="w-full bg-transparent text-4xl font-black text-white border-0 p-0 focus:ring-0 placeholder-gray-500" placeholder="R$ 0,00">
                         </div>
 
                         <div class="grid grid-cols-2 gap-3">
-                             <label class="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-green/20 has-[:checked]:border-brand-green/50 transition">
+                            <label class="p-3 rounded-xl bg-brand-surface-light border border-brand-border flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-green/20 has-[:checked]:border-brand-green/50 transition">
                                 <input type="radio" name="type" value="income" class="hidden">
-                                <span class="text-sm font-bold text-white">Entrada</span>
-                             </label>
-                             <label class="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-red/20 has-[:checked]:border-brand-red/50 transition">
+                                    <span class="text-sm font-bold text-brand-text-primary">Entrada</span>
+                            </label>
+                            <label class="p-3 rounded-xl bg-brand-surface-light border border-brand-border flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-red/20 has-[:checked]:border-brand-red/50 transition">
                                 <input type="radio" name="type" value="expense" class="hidden" checked>
-                                <span class="text-sm font-bold text-white">Saída</span>
-                             </label>
+                                    <span class="text-sm font-bold text-brand-text-primary">Saída</span>
+                            </label>
                         </div>
 
                         <div>
-                            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Descrição</label>
-                            <input type="text" name="description" required class="w-full bg-brand-bg/50 rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none" placeholder="Ex: Supermercado">
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Descrição</label>
+                            <input type="text" name="description" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: Supermercado">
                         </div>
 
                         <div>
-                             <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Categoria</label>
-                             <select id="transactionCategory" name="categoryId" required class="w-full bg-brand-bg/50 rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none">
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Categoria</label>
+                            <select id="transactionCategory" name="categoryId" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
                                 <option value="">Carregando...</option>
-                             </select>
+                            </select>
                         </div>
-                        
+
                         <div>
-                             <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Data</label>
-                             <input type="date" name="date" required class="w-full bg-brand-bg/50 rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none scheme-dark">
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data</label>
+                            <input type="date" name="date" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none scheme-dark">
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Conta</label>
+                            <select id="transactionAccount" name="account_id" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                                <option value="">Carregando contas...</option>
+                            </select>
+                            <p class="text-xs text-brand-text-secondary mt-2">Selecione de onde o dinheiro saiu/entrou</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
+                            <select name="context" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                                <option value="personal">👤 Pessoal (PF)</option>
+                                <option value="business">💼 Empresa (PJ)</option>
+                            </select>
+                            <p class="text-xs text-brand-text-secondary mt-2">Separe despesas pessoais e empresariais</p>
                         </div>
 
                         <!-- RECURRING TOGGLE -->
-                        <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                        <div class="bg-brand-surface-light rounded-xl p-4 border border-brand-border">
                             <label class="flex items-center justify-between cursor-pointer">
-                                <span class="text-sm font-bold text-gray-300">Repetir Mensalmente?</span>
+                                <span class="text-sm font-bold text-brand-text-secondary">Repetir Mensalmente?</span>
                                 <div class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" name="isRecurring" id="isRecurringInput" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-gray-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
+                                        <div class="w-11 h-6 bg-brand-surface-light rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
                                 </div>
                             </label>
 
-                            <div id="recurringOptions" class="hidden mt-4 pt-4 border-t border-white/5 animate-fade-in">
-                                 <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Dia do Vencimento</label>
-                                 <input type="number" name="day_of_month" min="1" max="31" class="w-full bg-brand-bg rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none" placeholder="Ex: 5">
-                                 <p class="text-xs text-gray-500 mt-2">Será gerado automaticamente todo mês neste dia.</p>
+                            <div id="recurringOptions" class="hidden mt-4 pt-4 border-t border-brand-border animate-fade-in">
+                                <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Dia do Vencimento</label>
+                                <input type="number" name="day_of_month" min="1" max="31" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 5">
+                                    <p class="text-xs text-brand-text-secondary mt-2">Será gerado automaticamente todo mês neste dia.</p>
                             </div>
                         </div>
 
                         <!-- BILLING TOGGLE (Parcelado) -->
-                        <div class="bg-white/5 rounded-xl p-4 border border-white/5">
+                        <div class="bg-brand-surface-light rounded-xl p-4 border border-brand-border">
                             <label class="flex items-center justify-between cursor-pointer">
-                                <span class="text-sm font-bold text-gray-300">Compra Parcelada?</span>
+                                <span class="text-sm font-bold text-brand-text-secondary">Compra Parcelada?</span>
                                 <div class="relative inline-flex items-center cursor-pointer">
                                     <input type="checkbox" name="isInstallment" id="isInstallmentInput" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-gray-700 rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
+                                        <div class="w-11 h-6 bg-brand-surface-light rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
                                 </div>
                             </label>
 
-                            <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-white/5 animate-fade-in">
-                                 <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Número de Parcelas</label>
-                                 <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-brand-bg rounded-xl border border-white/10 p-4 text-white focus:border-brand-green outline-none" placeholder="Ex: 10">
-                                 <p class="text-xs text-gray-500 mt-2">O valor total será dividido pelo número de parcelas.</p>
+                            <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-brand-border animate-fade-in">
+                                <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Número de Parcelas</label>
+                                <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 10">
+                                    <p class="text-xs text-brand-text-secondary mt-2">O valor total será dividido pelo número de parcelas.</p>
                             </div>
                         </div>
-                        </div>
 
-                        <button type="submit" class="w-full bg-brand-green text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition">
+                        <button type="submit" class="w-full bg-brand-green text-brand-text-primary font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition shrink-0 mt-4">
                             Salvar
                         </button>
                     </form>
                 </div>
             </div>
 
-            <!-- MODAL DELETE CONFIRMATION -->
-            <div id="deleteConfirmationModal" class="fixed inset-0 z-[60] hidden">
-                <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
-                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-4">
-                    <div class="bg-brand-surface border border-white/10 rounded-2xl p-6 shadow-2xl text-center animate-shake">
-                        <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </div>
-                        <h3 class="text-xl font-bold text-white mb-2">Excluir Transação?</h3>
-                        <p class="text-gray-400 text-sm mb-6">Essa ação não pode ser desfeita. Tem certeza que deseja apagar esse registro?</p>
-                        <div class="flex gap-3">
-                            <button id="cancelDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-gray-300 bg-white/5 hover:bg-white/10 transition" onclick="window.app.WalletModule.closeDeleteModal()">Cancelar</button>
-                            <button id="confirmDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-white bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 transition">Excluir</button>
-                        </div>
-                    </div>
+            < !--MODAL DELETE CONFIRMATION-- >
+    <div id="deleteConfirmationModal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-4">
+            <div class="bg-brand-surface border border-brand-border rounded-2xl p-6 shadow-2xl text-center animate-shake">
+                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </div>
+                <h3 class="text-xl font-bold text-brand-text-primary mb-2">Excluir Transação?</h3>
+                <p class="text-brand-text-secondary text-sm mb-6">Essa ação não pode ser desfeita. Tem certeza que deseja apagar esse registro?</p>
+                <div class="flex gap-3">
+                    <button id="cancelDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-brand-text-secondary bg-brand-surface-light hover:bg-brand-surface-light transition" onclick="window.app.WalletModule.closeDeleteModal()">Cancelar</button>
+                    <button id="confirmDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-brand-text-primary bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 transition">Excluir</button>
                 </div>
             </div>
-        `;
+        </div>
+    </div>
+`;
 
-        // Make globally available
+        // 4. Make globally available & Bind
         window.app.WalletModule = this;
-
         this.cacheDOM();
         this.bindEvents();
 
+        try {
+            // 5. Async Init (Fetch Data)
+            await this.init();
+
+            // Final Guard
+            if (window.app.currentView !== 'wallet') return;
+
+        } catch (error) {
+            console.error('Wallet Render Error:', error);
+            if (window.app.currentView === 'wallet') {
+                Toast.show('Erro ao carregar carteira', 'error');
+            }
+        }
+    },
+
+    async init() {
         // Initial Loads
-        this.loadCategories();
-        this.loadTransactions(true);
+        // We await these to ensuring "State Guard" in render works efficiently
+        await Promise.all([
+            this.loadCategories(),
+            this.loadAccounts(),
+            this.loadTransactions(true)
+        ]);
     },
 
     cacheDOM() {
@@ -386,6 +476,31 @@ export const WalletModule = {
         }
     },
 
+    async loadAccounts() {
+        const accountSelect = document.getElementById('transactionAccount');
+        if (!accountSelect) return;
+
+        try {
+            const accounts = AccountsService.accounts.filter(a => a.is_active);
+
+            if (accounts && accounts.length > 0) {
+                accountSelect.innerHTML = `
+                    <option value="">Selecione uma conta...</option>
+                    ${accounts.map(acc => {
+                    const icon = acc.icon || AccountsService.getTypeIcon(acc.type);
+                    const balance = (acc.current_balance / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                    return `<option value="${acc.id}">${icon} ${acc.name} (R$ ${balance})</option>`;
+                }).join('')}
+                `;
+            } else {
+                accountSelect.innerHTML = '<option value="">Nenhuma conta cadastrada</option>';
+            }
+        } catch (error) {
+            console.error('Error loading accounts:', error);
+            accountSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+        }
+    },
+
     async loadTransactions(reset = false) {
         if (!this.dom.list) return;
 
@@ -435,6 +550,7 @@ export const WalletModule = {
 
             this.renderTransactionsList();
             this.updateTotalBalance(); // New: Update the "Saldo do Mês" logic
+            this.renderSummaryCharts(); // NEW: Update charts
             this.updateLoadMoreButton();
             this.state.page++;
 
@@ -452,30 +568,30 @@ export const WalletModule = {
             const amount = parseFloat(tx.amount);
             return tx.type === 'income' ? acc + amount : acc - amount;
         }, 0);
-        this.dom.totalBalance.textContent = this.formatCurrency(total);
+        this.dom.totalBalance.textContent = this.formatCurrency(total / 100);
     },
 
     renderSkeleton() {
         if (!this.dom.list) return;
         this.dom.list.innerHTML = Array(3).fill(0).map(() => `
-            <div class="mb-6 animate-pulse">
-                <div class="h-4 bg-white/5 rounded w-24 mb-3 ml-1"></div>
-                <div class="bg-brand-surface border border-white/5 rounded-2xl overflow-hidden">
+    < div class="mb-6 animate-pulse" >
+                <div class="h-4 bg-brand-surface-light rounded w-24 mb-3 ml-1"></div>
+                <div class="bg-brand-surface border border-brand-border rounded-2xl overflow-hidden">
                     ${Array(3).fill(0).map(() => `
-                    <div class="p-4 flex items-center justify-between border-b border-white/5 last:border-0">
+                    <div class="p-4 flex items-center justify-between border-b border-brand-border last:border-0">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-white/5"></div>
+                            <div class="w-10 h-10 rounded-full bg-brand-surface-light"></div>
                             <div class="space-y-2">
-                                <div class="h-4 bg-white/5 rounded w-32"></div>
-                                <div class="h-3 bg-white/5 rounded w-20"></div>
+                                <div class="h-4 bg-brand-surface-light rounded w-32"></div>
+                                <div class="h-3 bg-brand-surface-light rounded w-20"></div>
                             </div>
                         </div>
-                        <div class="h-5 bg-white/5 rounded w-20"></div>
+                        <div class="h-5 bg-brand-surface-light rounded w-20"></div>
                     </div>
                     `).join('')}
                 </div>
-            </div>
-        `).join('');
+            </div >
+    `).join('');
     },
 
     renderTransactionsList(transactionsOverride = null) {
@@ -487,12 +603,12 @@ export const WalletModule = {
         if (transactions.length === 0) {
             this.dom.list.innerHTML = `
                 <div class="flex flex-col items-center justify-center py-12 text-center animate-fade-in-up">
-                    <div class="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                    <div class="w-24 h-24 bg-brand-surface-light rounded-full flex items-center justify-center mb-6">
                          <span class="text-4xl">💸</span>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">Nada por aqui... ainda!</h3>
-                    <p class="text-gray-400 max-w-[250px] mb-6">Suas transações aparecerão aqui. Que tal começar agora?</p>
-                    <button onclick="window.app.navigateTo('wallet'); document.querySelector('#wallet-add-btn')?.click()" class="px-6 py-3 bg-brand-gold text-white rounded-xl font-bold hover:bg-brand-gold-light transition shadow-glow-gold">
+                    <h3 class="text-xl font-bold text-brand-text-primary mb-2">Nada por aqui... ainda!</h3>
+                    <p class="text-brand-text-secondary max-w-[250px] mb-6">Suas transações aparecerão aqui. Que tal começar agora?</p>
+                    <button onclick="window.app.navigateTo('wallet'); document.querySelector('#wallet-add-btn')?.click()" class="px-6 py-3 bg-brand-gold text-brand-text-primary rounded-xl font-bold hover:bg-brand-gold-light transition shadow-glow-gold">
                         Registrar Transação
                     </button>
                 </div>
@@ -505,8 +621,8 @@ export const WalletModule = {
 
         this.dom.list.innerHTML = Object.entries(grouped).map(([date, items]) => `
             <div class="mb-6 animate-fade-in-up">
-                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
-                <div class="bg-brand-surface border border-white/5 rounded-2xl overflow-hidden">
+                <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
+                <div class="bg-brand-surface shadow-card-sm border border-brand-border rounded-2xl overflow-hidden">
                     ${items.map(t => this.renderTransactionItem(t)).join('')}
                 </div>
             </div>
@@ -519,7 +635,7 @@ export const WalletModule = {
             const val = parseInt(t.amount || 0);
             return t.type === 'income' ? acc + val : acc - val;
         }, 0);
-        this.dom.totalBalance.textContent = this.formatCurrency(total);
+        this.dom.totalBalance.textContent = this.formatCurrency(total / 100);
     },
 
     renderTransactionItem(t) {
@@ -535,36 +651,39 @@ export const WalletModule = {
             : categoryIcon;
 
         return `
-            <div class="flex items-center p-4 border-b border-white/5 last:border-0 hover:bg-white/5 transition group">
-                <!-- Icon -->
+            <div class="flex items-center p-4 border-b border-brand-border last:border-0 hover:bg-brand-surface-light transition group">
+                <!--Icon -->
                 <div class="w-10 h-10 rounded-full flex items-center justify-center mr-4 shrink-0" 
                      style="background-color: ${categoryColor}20; color: ${categoryColor};">
                     <span class="text-lg">${iconDisplay}</span>
                 </div>
                 
-                <!-- Text (Click to Edit) -->
+                <!--Text(Click to Edit) -->
                 <div class="flex-grow min-w-0 cursor-pointer" onclick="window.app.WalletModule.openEdit('${t.id}')">
-                    <h4 class="text-sm font-bold text-gray-200 truncate">${t.description}</h4>
-                    <p class="text-xs text-gray-500 truncate">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h4 class="text-sm font-bold text-brand-text-primary truncate">${t.description}</h4>
+                        ${t.context === 'business' ? '<span class="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-bold">PJ</span>' : ''}
+                    </div>
+                    <p class="text-xs text-brand-text-secondary truncate">
                         ${t.categories?.name || 'Geral'} 
                         ${t.payment_method ? `• ${this.formatPaymentMethod(t.payment_method)}` : ''}
                     </p>
                 </div>
 
-                <!-- Value -->
+                <!--Value -->
                 <div class="text-right ml-4 shrink-0">
                     <div class="font-bold text-sm ${colorClass} value-sensitive">
-                        ${sign} ${this.formatCurrency(t.amount)}
+                        ${sign} ${this.formatCurrency(t.amount / 100)}
                     </div>
                 </div>
 
-                <!-- Actions (Visible on Hover/Swipe) -->
+                <!--Actions(Visible on Hover / Swipe) -->
                 <div class="ml-4 flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                     <button class="btn-delete p-2 text-gray-500 hover:text-red-500 transition" data-id="${t.id}" onclick="event.stopPropagation(); window.app.WalletModule.askDelete('${t.id}')">
+                    <button class="btn-delete p-2 text-brand-text-secondary hover:text-red-500 transition" data-id="${t.id}" onclick="event.stopPropagation(); window.app.WalletModule.askDelete('${t.id}')">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                     </button>
+                    </button>
                 </div>
             </div>
         `;
@@ -586,16 +705,18 @@ export const WalletModule = {
             const formData = new FormData(this.dom.form);
             const isRecurring = document.getElementById('isRecurringInput').checked;
 
-            // Unmask Amount
+            // Unmask Amount - returns value in REAIS (float) for TransactionService.create()
             const rawAmount = document.getElementById('amountInput').value;
-            const amount = CurrencyMask.unmask(rawAmount);
+            const amountInReais = CurrencyMask.unmaskToFloat(rawAmount); // TransactionService.create() expects reais
 
             const transactionData = {
-                description: formData.get('description'),
-                amount: amount,
-                date: formData.get('date'), // Formato YYYY-MM-DD do input date
-                category_id: formData.get('categoryId'),
                 type: formData.get('type'),
+                description: formData.get('description'),
+                amount: amountInReais,
+                date: formData.get('date'), // Formato YYYY-MM-DD do input date
+                categoryId: formData.get('categoryId'), // Changed from category_id
+                context: formData.get('context') || 'personal',
+                account_id: formData.get('account_id'), // NEW: Account tracking
                 payment_method: formData.get('paymentMethod') || 'money',
                 status: 'paid'
             };
@@ -627,6 +748,31 @@ export const WalletModule = {
                     await TransactionService.create(transactionData);
                     Toast.show('Transação criada!', 'success');
                     HapticService.success();
+
+                    // Check budget limit for expenses
+                    if (transactionData.type === 'expense' && transactionData.categoryId) {
+                        const txDate = transactionData.date ? new Date(transactionData.date) : new Date();
+                        const budgetStatus = await CategoryBudgetService.checkBudget(
+                            transactionData.categoryId,
+                            transactionData.amount * 100, // Convert to cents
+                            txDate
+                        );
+
+                        if (budgetStatus.hasLimit) {
+                            if (budgetStatus.exceeded) {
+                                Toast.show(
+                                    `⚠️ Orçamento de ${budgetStatus.categoryName} excedido! (${budgetStatus.usagePercent}%)`,
+                                    'warning'
+                                );
+                                HapticService.warning();
+                            } else if (budgetStatus.nearLimit) {
+                                Toast.show(
+                                    `📊 ${budgetStatus.usagePercent}% do orçamento de ${budgetStatus.categoryName}`,
+                                    'info'
+                                );
+                            }
+                        }
+                    }
                 }
             }
 
@@ -677,7 +823,7 @@ export const WalletModule = {
             this.dom.deleteModal.classList.remove('hidden');
         } else {
             // Fallback just in case
-            if (confirm('Excluir transação?')) this.confirmDelete();
+            window.ModalUtils.confirm('Excluir', 'Excluir transação?', { danger: true }).then(confirmed => { if (confirmed) this.confirmDelete(); });
         }
     },
 
@@ -727,7 +873,7 @@ export const WalletModule = {
         const description = this.dom.form.querySelector('[name="description"]').value.trim();
         const rawAmount = this.dom.form.querySelector('[name="amount"]').value;
         // Check functionality of CurrencyMask, fallback to simple parsing
-        const amount = typeof CurrencyMask !== 'undefined' ? CurrencyMask.unmask(rawAmount) : parseFloat(rawAmount.replace('R$', '').replace('.', '').replace(',', '.').trim());
+        const amount = typeof CurrencyMask !== 'undefined' ? CurrencyMask.unmaskToFloat(rawAmount) : parseFloat(rawAmount.replace('R$', '').replace('.', '').replace(',', '.').trim());
         const categoryId = this.dom.form.querySelector('[name="categoryId"]').value;
         const date = this.dom.form.querySelector('[name="date"]').value;
 
@@ -763,7 +909,21 @@ export const WalletModule = {
 
     handleFilterClick(e) {
         const type = e.target.dataset.type;
-        this.state.filters.type = type === 'all' ? null : type;
+        const context = e.target.dataset.context;
+
+        if (type !== undefined) {
+            this.state.filters.type = type === 'all' ? null : type;
+            // Clear context filter when selecting type
+            if (type === 'all') {
+                this.state.filters.context = null;
+            }
+        }
+
+        if (context !== undefined) {
+            this.state.filters.context = context;
+            // Clear type filter when selecting context
+            this.state.filters.type = null;
+        }
 
         this.dom.filterTabs.forEach(t => t.classList.remove('active'));
         e.target.classList.add('active');
@@ -826,9 +986,9 @@ export const WalletModule = {
         this.state.categories.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
-            // Emoji ou nada se for class icon
-            const icon = cat.icon.includes('fa-') ? '' : cat.icon;
-            option.text = `${icon} ${cat.name}`;
+            // Emoji ou nada se for class icon - verificação de null/undefined
+            const icon = (cat.icon && cat.icon.includes('fa-')) ? '' : (cat.icon || '');
+            option.text = `${icon} ${cat.name} `;
             this.dom.categorySelect.appendChild(option);
         });
     },
@@ -862,12 +1022,12 @@ export const WalletModule = {
 
         if (viewName === 'transactions') {
             if (txBtn) txBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all';
-            if (subBtn) subBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all';
+            if (subBtn) subBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-brand-text-secondary hover:text-brand-text-primary transition-all';
             if (filters) filters.classList.remove('hidden');
             if (fab) fab.classList.remove('hidden');
             this.renderTransactionsList();
         } else {
-            if (txBtn) txBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-gray-400 hover:text-white transition-all';
+            if (txBtn) txBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold text-brand-text-secondary hover:text-brand-text-primary transition-all';
             if (subBtn) subBtn.className = 'flex-1 py-2 rounded-lg text-sm font-bold bg-brand-gold text-brand-darker shadow-lg transition-all';
             if (filters) filters.classList.add('hidden');
             if (fab) fab.classList.remove('hidden'); // Show FAB in Subscriptions too
@@ -882,8 +1042,8 @@ export const WalletModule = {
         // Skeleton
         list.innerHTML = `
             <div class="animate-pulse space-y-3">
-               <div class="h-20 bg-white/5 rounded-2xl w-full"></div>
-               <div class="h-20 bg-white/5 rounded-2xl w-full"></div>
+                <div class="h-20 bg-brand-surface-light rounded-2xl w-full"></div>
+                <div class="h-20 bg-brand-surface-light rounded-2xl w-full"></div>
             </div>
         `;
 
@@ -903,47 +1063,50 @@ export const WalletModule = {
 
         let html = `
             <!-- Committed Income Widget -->
-            <div class="bg-white/5 p-6 rounded-2xl border border-white/5 mb-6">
+            <div class="bg-brand-surface-light p-6 rounded-2xl border border-brand-border mb-6">
                 <div class="flex justify-between items-end mb-2">
                     <div>
-                        <p class="text-xs text-gray-400 uppercase tracking-widest font-bold">Custo Fixo Mensal</p>
-                        <h3 class="text-2xl font-black text-white value-sensitive">R$ ${(totalRecurring / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
+                        <p class="text-xs text-brand-text-secondary uppercase tracking-widest font-bold">Custo Fixo Mensal</p>
+                        <h3 class="text-2xl font-black text-brand-text-primary value-sensitive">R$ ${(totalRecurring / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
                     </div>
                     <div class="text-right">
                         <p class="text-xs text-${committedPercent > 50 ? 'brand-red' : 'brand-green'} font-bold">${committedPercent}% da Renda</p>
                     </div>
                 </div>
-                <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div class="h-2 bg-brand-surface-light rounded-full overflow-hidden">
                     <div class="h-full bg-${committedPercent > 50 ? 'brand-red' : 'brand-green'} transition-all duration-1000" style="width: ${committedPercent}%"></div>
                 </div>
-                <p class="text-[10px] text-gray-500 mt-2">Valor comprometido antes mesmo do mês começar.</p>
+                <p class="text-[10px] text-brand-text-secondary mt-2">Valor comprometido antes mesmo do mês começar.</p>
             </div>
 
-            <h3 class="text-sm font-bold text-gray-400 uppercase mb-4 px-2">Assinaturas Ativas</h3>
+            <!-- Credit Cards Section -->
+            ${await this.renderCreditCardsSection()}
+
+            <h3 class="text-sm font-bold text-brand-text-secondary uppercase mb-4 px-2">Assinaturas Ativas</h3>
             <div class="space-y-3">
         `;
 
         if (recurring.length === 0) {
             html += `
                 <div class="text-center py-12">
-                    <div class="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔄</div>
-                    <p class="text-gray-400 text-sm">Nenhuma assinatura ou conta fixa cadastrada.</p>
+                    <div class="w-16 h-16 bg-brand-surface-light rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔄</div>
+                    <p class="text-brand-text-secondary text-sm">Nenhuma assinatura ou conta fixa cadastrada.</p>
                     <p class="text-gray-600 text-xs mt-2">Adicione uma transação e marque "Repetir Mensalmente".</p>
                 </div>
             `;
         } else {
             html += recurring.map(r => `
-                <div class="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                <div class="bg-brand-surface-light p-4 rounded-2xl border border-brand-border flex items-center justify-between">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs uppercase">
                             ${r.description ? r.description.substring(0, 2) : '??'}
                         </div>
                         <div>
-                            <h4 class="font-bold text-white text-sm">${r.description}</h4>
-                            <p class="text-xs text-gray-400">Todo dia ${r.day_of_month}</p>
+                            <h4 class="font-bold text-brand-text-primary text-sm">${r.description}</h4>
+                            <p class="text-xs text-brand-text-secondary">Todo dia ${r.day_of_month}</p>
                         </div>
                     </div>
-                    <div class="font-bold text-white value-sensitive">
+                    <div class="font-bold text-brand-text-primary value-sensitive">
                         R$ ${(r.amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </div>
                 </div>
@@ -952,6 +1115,111 @@ export const WalletModule = {
 
         html += '</div>';
         list.innerHTML = html;
+    },
+
+    async renderCreditCardsSection() {
+        await CreditCardService.init();
+        const cards = CreditCardService.cards;
+
+        if (cards.length === 0) {
+            return `
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-4 px-2">
+                        <h3 class="text-sm font-bold text-brand-text-secondary uppercase">💳 Cartões de Crédito</h3>
+                        <button onclick="window.app.openCreditCardModal()" class="text-xs text-brand-gold font-bold hover:underline">+ Novo Cartão</button>
+                    </div>
+                    <div class="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl p-6 text-center">
+                        <div class="w-14 h-14 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">💳</div>
+                        <p class="text-sm text-brand-text-secondary">Nenhum cartão cadastrado</p>
+                        <button onclick="window.app.openCreditCardModal()" class="mt-3 text-xs bg-purple-500/20 text-purple-400 px-4 py-2 rounded-lg hover:bg-purple-500/30 transition font-bold">
+                            Adicionar Cartão
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        const today = new Date();
+        const currentDay = today.getDate();
+
+        return `
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-4 px-2">
+                    <h3 class="text-sm font-bold text-brand-text-secondary uppercase">💳 Cartões de Crédito</h3>
+                    <button onclick="window.app.openCreditCardModal()" class="text-xs text-brand-gold font-bold hover:underline">+ Novo</button>
+                </div>
+                <div class="space-y-4">
+                    ${cards.map(card => {
+            const daysUntilDue = card.billing_day >= currentDay
+                ? card.billing_day - currentDay
+                : (new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - currentDay) + card.billing_day;
+            const isDueSoon = daysUntilDue <= 5;
+            const invoiceAmount = (card.current_invoice || 0) / 100;
+            const limitUsed = card.credit_limit ? ((card.current_invoice / card.credit_limit) * 100).toFixed(0) : 0;
+
+            return `
+                            <div class="bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 rounded-2xl p-5 relative overflow-hidden shadow-xl">
+                                <!-- Card Design Elements -->
+                                <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                                <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+                                
+                                <div class="relative z-10">
+                                    <!-- Header -->
+                                    <div class="flex justify-between items-start mb-4">
+                                        <div>
+                                            <p class="text-purple-200 text-[10px] uppercase tracking-widest font-bold">Fatura Atual</p>
+                                            <h4 class="text-2xl font-black text-white value-sensitive">
+                                                R$ ${invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                            </h4>
+                                        </div>
+                                        <div class="text-right">
+                                            <p class="text-white font-bold text-sm">${card.name}</p>
+                                            ${card.last_digits ? `<p class="text-purple-200 text-xs">**** ${card.last_digits}</p>` : ''}
+                                        </div>
+                                    </div>
+
+                                    <!-- Due Date -->
+                                    <div class="flex justify-between items-center mb-4">
+                                        <p class="text-purple-200 text-xs">
+                                            📅 Vence dia <span class="text-white font-bold">${card.billing_day}</span>
+                                            ${isDueSoon ? `<span class="text-yellow-300 ml-1">(em ${daysUntilDue} dias)</span>` : ''}
+                                        </p>
+                                        ${card.credit_limit ? `
+                                            <p class="text-purple-200 text-xs">Limite: ${limitUsed}% usado</p>
+                                        ` : ''}
+                                    </div>
+
+                                    <!-- Limit Progress Bar -->
+                                    ${card.credit_limit ? `
+                                        <div class="h-1.5 bg-purple-900/50 rounded-full overflow-hidden mb-4">
+                                            <div class="h-full bg-gradient-to-r from-purple-400 to-pink-400 transition-all" style="width: ${Math.min(limitUsed, 100)}%"></div>
+                                        </div>
+                                    ` : ''}
+
+                                    <!-- Action Buttons -->
+                                    <div class="flex gap-2">
+                                        <button onclick="window.app.openAddPurchaseModal('${card.id}')" 
+                                            class="flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
+                                            ➕ Compra
+                                        </button>
+                                        <button onclick="window.app.viewCardInvoice('${card.id}')" 
+                                            class="flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
+                                            📋 Ver Fatura
+                                        </button>
+                                        ${invoiceAmount > 0 ? `
+                                            <button onclick="window.app.payCreditCardInvoice('${card.id}', '${card.name}', ${card.current_invoice})" 
+                                                class="flex-1 bg-green-500/30 hover:bg-green-500/50 text-green-300 text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
+                                                ✅ Pagar
+                                            </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+        }).join('')}
+                </div>
+            </div>
+        `;
     },
 
     openTransactionModal(mode = 'create', transaction = null, isRecurringDefault = false) {
@@ -1024,5 +1292,327 @@ export const WalletModule = {
 
     closeTransactionModal() {
         if (this.dom.modal) this.dom.modal.classList.add('hidden');
+    },
+
+    // Chart instances
+    expenseChart: null,
+    incomeChart: null,
+
+    renderSummaryCharts() {
+        const transactions = this.state.transactions;
+
+        // Calculate totals
+        let totalIncome = 0;
+        let totalExpenses = 0;
+        const expensesByCategory = {};
+        const incomesBySource = {};
+
+        transactions.forEach(tx => {
+            const amount = Math.abs(parseFloat(tx.amount) || 0);
+
+            if (tx.type === 'income') {
+                totalIncome += amount;
+                const source = tx.description || 'Outros';
+                incomesBySource[source] = (incomesBySource[source] || 0) + amount;
+            } else if (tx.type === 'expense') {
+                totalExpenses += amount;
+                const catName = tx.categories?.name || tx.category_name || 'Outros';
+                expensesByCategory[catName] = (expensesByCategory[catName] || 0) + amount;
+            }
+        });
+
+        // Update stats cards
+        const incomeEl = document.getElementById('walletTotalIncome');
+        const expenseEl = document.getElementById('walletTotalExpenses');
+        const balanceEl = document.getElementById('walletNetBalance');
+
+        if (incomeEl) incomeEl.textContent = this.formatCurrency(totalIncome / 100);
+        if (expenseEl) expenseEl.textContent = this.formatCurrency(totalExpenses / 100);
+        if (balanceEl) {
+            const netBalance = totalIncome - totalExpenses;
+            balanceEl.textContent = this.formatCurrency(netBalance / 100);
+            balanceEl.className = balanceEl.className.replace(/text-brand-(green|red|gold)/g, '');
+            balanceEl.classList.add(netBalance >= 0 ? 'text-brand-green' : 'text-brand-red');
+        }
+
+        // Prepare chart data - Top 5 categories
+        const sortedExpenses = Object.entries(expensesByCategory)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        const sortedIncomes = Object.entries(incomesBySource)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+        // Default colors
+        const expenseColors = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+        const incomeColors = ['#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#84cc16'];
+
+        // Render Expense Chart
+        const expenseCanvas = document.getElementById('walletExpenseChart');
+        if (expenseCanvas && sortedExpenses.length > 0) {
+            if (this.expenseChart) this.expenseChart.destroy();
+
+            this.expenseChart = new Chart(expenseCanvas.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: sortedExpenses.map(([name]) => name),
+                    datasets: [{
+                        data: sortedExpenses.map(([, value]) => value),
+                        backgroundColor: expenseColors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.raw;
+                                    return ` R$ ${(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        } else if (expenseCanvas) {
+            expenseCanvas.parentElement.innerHTML = '<p class="text-center text-brand-text-secondary text-xs py-8">Sem despesas</p>';
+        }
+
+        // Render Income Chart
+        const incomeCanvas = document.getElementById('walletIncomeChart');
+        if (incomeCanvas && sortedIncomes.length > 0) {
+            if (this.incomeChart) this.incomeChart.destroy();
+
+            this.incomeChart = new Chart(incomeCanvas.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: sortedIncomes.map(([name]) => name),
+                    datasets: [{
+                        data: sortedIncomes.map(([, value]) => value),
+                        backgroundColor: incomeColors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '60%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (context) => {
+                                    const value = context.raw;
+                                    return ` R$ ${(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        } else if (incomeCanvas) {
+            incomeCanvas.parentElement.innerHTML = '<p class="text-center text-brand-text-secondary text-xs py-8">Sem receitas</p>';
+        }
     }
+};
+
+// === Credit Card Functions ===
+window.app = window.app || {};
+
+window.app.openCreditCardModal = () => {
+    const existing = document.getElementById('credit-card-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'credit-card-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.innerHTML = `
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up max-h-[80vh] overflow-y-auto">
+            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
+            <h3 class="text-xl font-bold text-brand-text-primary mb-6">💳 Novo Cartão de Crédito</h3>
+            
+            <form id="credit-card-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Nome do Cartão</label>
+                    <input type="text" name="name" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Nubank, Inter, C6">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Banco / Instituição</label>
+                    <input type="text" name="bank" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Nubank">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Últimos 4 Dígitos</label>
+                        <input type="text" name="last_digits" maxlength="4" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="1234">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Dia Vencimento</label>
+                        <input type="number" name="billing_day" min="1" max="31" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="10">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Limite (Opcional)</label>
+                    <input type="number" step="0.01" name="credit_limit" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: 5000.00">
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-4 rounded-xl mt-4">
+                    Salvar Cartão
+                </button>
+            </form>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('credit-card-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        try {
+            await CreditCardService.createCard({
+                name: form.name.value,
+                bank: form.bank.value,
+                last_digits: form.last_digits.value,
+                billing_day: form.billing_day.value,
+                credit_limit: form.credit_limit.value
+            });
+            Toast.show('Cartão adicionado com sucesso!', 'success');
+            modal.remove();
+            WalletModule.renderSubscriptions();
+        } catch (error) {
+            Toast.show('Erro: ' + error.message, 'error');
+        }
+    };
+};
+
+window.app.openAddPurchaseModal = (cardId) => {
+    const existing = document.getElementById('add-purchase-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'add-purchase-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.innerHTML = `
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up">
+            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
+            <h3 class="text-xl font-bold text-brand-text-primary mb-6">🛒 Nova Compra no Cartão</h3>
+            
+            <form id="add-purchase-form" class="space-y-4">
+                <input type="hidden" name="card_id" value="${cardId}">
+                <div>
+                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
+                    <input type="number" step="0.01" name="amount" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-2xl font-bold text-white" placeholder="0,00">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Descrição</label>
+                    <input type="text" name="description" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Amazon, iFood, Uber">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data</label>
+                        <input type="date" name="purchase_date" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white [color-scheme:dark]" value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Parcelas</label>
+                        <input type="number" name="installments" min="1" max="24" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" value="1">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-4 rounded-xl mt-4">
+                    Adicionar Compra
+                </button>
+            </form>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('add-purchase-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        try {
+            await CreditCardService.addPurchase(form.card_id.value, {
+                amount: form.amount.value,
+                description: form.description.value,
+                purchase_date: form.purchase_date.value,
+                installments: form.installments.value
+            });
+            Toast.show('Compra adicionada à fatura!', 'success');
+            modal.remove();
+            WalletModule.renderSubscriptions();
+        } catch (error) {
+            Toast.show('Erro: ' + error.message, 'error');
+        }
+    };
+};
+
+window.app.payCreditCardInvoice = async (cardId, cardName, amountCents) => {
+    try {
+        // Pay the invoice (reset to 0)
+        await CreditCardService.payInvoice(cardId);
+
+        // Create expense transaction
+        await TransactionService.create({
+            amount: amountCents / 100,
+            description: `Fatura ${cardName}`,
+            type: 'expense',
+            date: new Date().toISOString(),
+            context: 'personal',
+            status: 'paid',
+            category: 'bills'
+        });
+
+        Toast.show(`✅ Fatura do ${cardName} paga!`, 'success');
+        WalletModule.renderSubscriptions();
+    } catch (error) {
+        Toast.show('Erro: ' + error.message, 'error');
+    }
+};
+
+window.app.viewCardInvoice = async (cardId) => {
+    const purchases = await CreditCardService.getCardPurchases(cardId);
+    const card = CreditCardService.cards.find(c => c.id === cardId);
+
+    const existing = document.getElementById('invoice-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'invoice-modal';
+    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.innerHTML = `
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up max-h-[80vh] overflow-y-auto">
+            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
+            <h3 class="text-xl font-bold text-brand-text-primary mb-2">📋 Fatura ${card?.name || 'Cartão'}</h3>
+            <p class="text-2xl font-black text-purple-400 mb-6 value-sensitive">
+                R$ ${((card?.current_invoice || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+            
+            <div class="space-y-2">
+                ${purchases.length === 0 ? `
+                    <div class="text-center py-8 text-brand-text-secondary">
+                        <p class="text-sm">Nenhuma compra nesta fatura</p>
+                    </div>
+                ` : purchases.map(p => `
+                    <div class="bg-brand-surface-light p-3 rounded-xl flex justify-between items-center">
+                        <div>
+                            <p class="text-sm font-bold text-brand-text-primary">${p.description}</p>
+                            <p class="text-[10px] text-brand-text-secondary">${new Date(p.purchase_date).toLocaleDateString('pt-BR')}</p>
+                        </div>
+                        <span class="text-sm font-bold text-brand-text-primary value-sensitive">
+                            R$ ${(p.amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <button onclick="this.closest('#invoice-modal').remove()" class="w-full bg-brand-surface-light text-brand-text-secondary font-bold py-3 rounded-xl mt-6">
+                Fechar
+            </button>
+        </div>
+    `;
+    document.body.appendChild(modal);
 };

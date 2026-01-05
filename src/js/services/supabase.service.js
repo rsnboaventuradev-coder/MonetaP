@@ -23,11 +23,30 @@ export const SupabaseService = {
 
     /**
      * Get current user session
+     * Includes fallback to getUser if session is not immediately available
      */
     async getSession() {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        return data.session;
+        try {
+            const { data, error } = await supabase.auth.getSession();
+            if (error) throw error;
+
+            // If session exists, return it
+            if (data.session) {
+                return data.session;
+            }
+
+            // Fallback: Try to get user directly (in case session is being refreshed)
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            if (!userError && userData.user) {
+                // Create a minimal session-like object with the user
+                return { user: userData.user };
+            }
+
+            return null;
+        } catch (err) {
+            console.error('Error getting session:', err);
+            return null;
+        }
     },
 
     /**
@@ -86,12 +105,14 @@ export const SupabaseService = {
         }
 
         // Show Toast
-        // Assuming Toast is available globally as window.Toast or imported. 
-        // Ideally we should inject or import. Since Toast is global in app.js via window.Toast:
+        // Toast is available globally as window.Toast (set in app.js)
         if (window.Toast) {
             window.Toast.show(message, 'error');
         } else {
-            alert(message);
+            // Fallback: log to console if Toast somehow isn't loaded
+            console.error('Toast not available:', message);
         }
     }
 };
+
+

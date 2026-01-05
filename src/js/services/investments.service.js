@@ -55,7 +55,8 @@ export const InvestmentsService = {
     },
 
     async fetchAll() {
-        const { data: { user } } = await SupabaseService.client.auth.getUser();
+        const { data: { session } } = await SupabaseService.client.auth.getSession();
+        const user = session?.user;
         if (!user) return;
 
         const { data, error } = await SupabaseService.client
@@ -72,22 +73,44 @@ export const InvestmentsService = {
 
     async create(investment) {
         // Get current user safely
-        const { data: { user }, error: authError } = await SupabaseService.client.auth.getUser();
+        const { data: { session }, error: authError } = await SupabaseService.client.auth.getSession();
+        const user = session?.user;
         if (authError || !user) throw new Error('User not authenticated');
 
-        // Prepare data: Convert monetary values to Cents (Integer)
+        // Prepare data: Map only valid DB columns to avoid "column not found" errors
         const dbData = {
-            ...investment,
-            user_id: user.id
+            user_id: user.id,
+            name: investment.name,
+            ticker: investment.ticker,
+            type: investment.type,
+            quantity: investment.quantity !== undefined ? parseFloat(investment.quantity) || 0 : 0,
+            sector: investment.sector || null,
+            // Fixed income / Treasure specific
+            issuer: investment.issuer || null,
+            indexer: investment.indexer || null,
+            rate: investment.rate !== undefined ? parseFloat(investment.rate) || null : null,
+            maturity_date: investment.maturity_date || null,
+            // NEW: Fixed income complete fields
+            principal_amount: investment.principal_amount !== undefined ? Math.round(parseFloat(investment.principal_amount) * 100) : null,
+            application_date: investment.application_date || null,
+            liquidity: investment.liquidity || null,
+            entity_context: investment.entity_context || 'personal',
+            is_emergency_fund: investment.is_emergency_fund === true || investment.is_emergency_fund === 'on',
+            // Stock / FII specific  
+            dividend_yield: investment.dividend_yield !== undefined ? parseFloat(investment.dividend_yield) || null : null,
+            p_vp: investment.p_vp !== undefined ? parseFloat(investment.p_vp) || null : null,
         };
 
-        // If average_price comes as float (e.g. 10.50), convert to 1050
+        // Convert monetary values to Cents (Integer)
         if (investment.average_price !== undefined) {
-            dbData.average_price = Math.round(investment.average_price * 100);
+            dbData.average_price = Math.round(parseFloat(investment.average_price) * 100);
+        } else {
+            dbData.average_price = 0;
         }
-        // If current_price comes as float
         if (investment.current_price !== undefined) {
-            dbData.current_price = Math.round(investment.current_price * 100);
+            dbData.current_price = Math.round(parseFloat(investment.current_price) * 100);
+        } else {
+            dbData.current_price = 0;
         }
 
         const { data, error } = await SupabaseService.client
@@ -280,3 +303,5 @@ export const InvestmentsService = {
         return { labels: ['Hoje', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'], dataMy, dataCDI, dataIbov };
     }
 };
+
+

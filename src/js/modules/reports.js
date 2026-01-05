@@ -19,10 +19,10 @@ export const ReportsModule = {
             <div class="h-full flex flex-col bg-brand-dark safe-area-top">
                 <header class="p-6 pb-4 flex justify-between items-center">
                     <div>
-                        <h1 class="text-2xl font-bold text-white mb-1">Relatórios</h1>
-                        <p class="text-gray-400 text-sm">Análise visual das suas finanças</p>
+                        <h1 class="text-2xl font-bold text-brand-text-primary mb-1">Relatórios</h1>
+                        <p class="text-brand-text-secondary text-sm">Análise visual das suas finanças</p>
                     </div>
-                    <button onclick="ReportsService.exportToCSV(new Date().getMonth(), new Date().getFullYear(), 'all')" class="bg-brand-surface border border-white/10 text-white text-[10px] font-bold px-3 py-2 rounded-lg hover:bg-white/5 transition flex items-center gap-2">
+                    <button onclick="ReportsService.exportToCSV(new Date().getMonth(), new Date().getFullYear(), 'all')" class="bg-brand-surface border border-brand-border text-brand-text-primary text-[10px] font-bold px-3 py-2 rounded-lg hover:bg-brand-surface-light transition flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
@@ -32,20 +32,20 @@ export const ReportsModule = {
 
                 <div class="flex-1 overflow-y-auto p-4 pb-24 space-y-6">
                     <!-- Balance Chart Card -->
-                    <div class="bg-brand-darker rounded-2xl p-4 border border-white/5">
-                         <h3 class="text-white font-bold mb-4">Entradas vs Saídas</h3>
+                    <div class="bg-brand-darker rounded-2xl p-4 border border-brand-border">
+                         <h3 class="text-brand-text-primary font-bold mb-4">Entradas vs Saídas</h3>
                          <div class="relative h-48 w-full">
                             <canvas id="balance-chart"></canvas>
                          </div>
                     </div>
 
                     <!-- Category Chart Card -->
-                    <div class="bg-brand-darker rounded-2xl p-4 border border-white/5">
-                         <h3 class="text-white font-bold mb-4">Despesas por Categoria</h3>
+                    <div class="bg-brand-darker rounded-2xl p-4 border border-brand-border">
+                         <h3 class="text-brand-text-primary font-bold mb-4">Despesas por Categoria</h3>
                          <div class="relative h-64 w-full">
                             <canvas id="category-chart"></canvas>
                          </div>
-                         <div id="category-legend" class="mt-4 grid grid-cols-2 gap-2 text-xs text-gray-400">
+                         <div id="category-legend" class="mt-4 grid grid-cols-2 gap-2 text-xs text-brand-text-secondary">
                             <!-- Legend items injected here -->
                          </div>
                     </div>
@@ -137,3 +137,6 @@ export const ReportsModule = {
         });
     }
 };
+
+
+

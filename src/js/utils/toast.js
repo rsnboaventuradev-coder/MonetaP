@@ -17,13 +17,13 @@ export class Toast {
 
         const toast = document.createElement('div');
         // Base classes
-        let classes = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md border border-white/10 transform transition-all duration-300 translate-x-10 opacity-0 ';
+        let classes = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md border border-brand-border bg-brand-surface transform transition-all duration-300 translate-x-10 opacity-0 ';
 
-        // Color classes
-        if (type === 'success') classes += 'bg-green-600/90 shadow-lg';
-        else if (type === 'error') classes += 'bg-red-600/90 shadow-lg';
-        else if (type === 'warning') classes += 'bg-yellow-600/90 shadow-lg';
-        else classes += 'bg-gray-800/90 shadow-lg';
+        // Color classes (Border indicators)
+        if (type === 'success') classes += 'border-l-4 border-l-brand-green';
+        else if (type === 'error') classes += 'border-l-4 border-l-brand-red';
+        else if (type === 'warning') classes += 'border-l-4 border-l-brand-gold';
+        else classes += 'border-l-4 border-l-blue-500';
 
         toast.className = classes;
 
@@ -31,7 +31,7 @@ export class Toast {
 
         toast.innerHTML = `
             <div class="text-xl">${icon}</div>
-            <div class="text-sm font-semibold text-white">${message}</div>
+            <div class="text-sm font-semibold text-brand-text-primary">${message}</div>
         `;
 
         this.container.appendChild(toast);
@@ -59,3 +59,5 @@ export class Toast {
         }
     }
 }
+
+

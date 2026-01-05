@@ -1,32 +1,56 @@
-import { supabase } from './supabase.service.js';
+import { supabase, SupabaseService } from './supabase.service.js';
 import { StoreService } from './store.service.js';
 
 const CACHE_KEY_BUDGET = 'moneta_budget_allocations';
 
 export const BudgetService = {
-    allocations: [],
+    allocations: [], // Now stores mixed context allocations, or we can separate them. 
+    // Recommendation: Store all, filter by context when needed.
     listeners: [],
 
     async init() {
-        this.allocations = StoreService.get(CACHE_KEY_BUDGET) || this.getDefaultAllocations();
+        this.allocations = StoreService.get(CACHE_KEY_BUDGET) || [];
+        if (this.allocations.length === 0) {
+            // If empty, init defaults for both contexts
+            await this.initDefaults('personal');
+            await this.initDefaults('business');
+        } else {
+            // Check if we have business allocations, if not init them (migration path)
+            const hasBusiness = this.allocations.some(a => a.context === 'business');
+            if (!hasBusiness) {
+                await this.initDefaults('business');
+            }
+        }
+
         if (navigator.onLine) {
             await this.fetchAll();
         }
     },
 
-    getDefaultAllocations() {
+    getDefaultAllocations(context = 'personal') {
+        if (context === 'business') {
+            return [
+                { category: 'operational_costs', percentage: 20, context: 'business', label: 'Custos Operacionais', color: '#ef4444', description: 'Aluguel, Software, Energia, Manutenção' },
+                { category: 'supplies', percentage: 25, context: 'business', label: 'Insumos e Materiais', color: '#f97316', description: 'Matéria-prima, Revenda, Equipamentos' },
+                { category: 'team', percentage: 25, context: 'business', label: 'Equipe e Terceirizados', color: '#3b82f6', description: 'Pró-labore, Salários, Freelancers' },
+                { category: 'taxes', percentage: 10, context: 'business', label: 'Impostos e Taxas', color: '#eab308', description: 'DAS, ISS, Contabilidade' },
+                { category: 'profit', percentage: 20, context: 'business', label: 'Lucro e Reservas', color: '#22c55e', description: 'Capital de Giro, Lucros' }
+            ];
+        }
+
         return [
-            { category: 'financial_freedom', percentage: 25 },
-            { category: 'fixed_costs', percentage: 30 },
-            { category: 'comfort', percentage: 15 },
-            { category: 'goals', percentage: 15 },
-            { category: 'pleasures', percentage: 10 },
-            { category: 'knowledge', percentage: 5 }
+            { category: 'financial_freedom', percentage: 25, context: 'personal' },
+            { category: 'fixed_costs', percentage: 30, context: 'personal' },
+            { category: 'comfort', percentage: 15, context: 'personal' },
+            { category: 'goals', percentage: 15, context: 'personal' },
+            { category: 'pleasures', percentage: 10, context: 'personal' },
+            { category: 'knowledge', percentage: 5, context: 'personal' }
         ];
     },
 
     async fetchAll() {
-        const { data: { user } } = await supabase.auth.getUser();
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) return;
 
         const { data, error } = await supabase
@@ -34,33 +58,47 @@ export const BudgetService = {
             .select('*')
             .eq('user_id', user.id);
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
+            // Merge defaults if database has incomplete data (e.g. missing new categories)
+            // For now, simpler: Use data from DB as truth
             this.allocations = data;
+
+            // Check for missing business context in data fetched
+            if (!this.allocations.some(a => a.context === 'business')) {
+                await this.initDefaults('business');
+            }
+
             this.saveCache();
             this.notifyListeners();
-        } else if (data && data.length === 0) {
-            // Initialize with defaults if empty
-            await this.initDefaults();
         }
     },
 
-    async initDefaults() {
-        const defaults = this.getDefaultAllocations();
-        for (const item of defaults) {
-            await this.save(item.category, item.percentage);
+    async initDefaults(context) {
+        const defaults = this.getDefaultAllocations(context);
+        // Add to local state immediately to avoid flickers
+        // Filter out existing ones to avoid duplicates if re-running
+        const existing = this.allocations.filter(a => a.context === context).map(a => a.category);
+        const toAdd = defaults.filter(d => !existing.includes(d.category));
+
+        this.allocations = [...this.allocations, ...toAdd];
+        this.saveCache();
+
+        for (const item of toAdd) {
+            await this.save(item.category, item.percentage, context);
         }
     },
 
-    async save(category, percentage) {
-        const { data: { user } } = await supabase.auth.getUser();
+    async save(category, percentage, context = 'personal') {
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
         if (!user) return;
 
         // Optimistic Update
-        const index = this.allocations.findIndex(a => a.category === category);
+        const index = this.allocations.findIndex(a => a.category === category && a.context === context);
         if (index >= 0) {
             this.allocations[index].percentage = percentage;
         } else {
-            this.allocations.push({ category, percentage });
+            this.allocations.push({ category, percentage, context });
         }
         this.saveCache();
         this.notifyListeners();
@@ -72,8 +110,9 @@ export const BudgetService = {
                 user_id: user.id,
                 category,
                 percentage,
+                context,
                 updated_at: new Date().toISOString()
-            }, { onConflict: 'user_id, category' });
+            }, { onConflict: 'user_id, category, context' });
 
         if (error) console.error('Error saving allocation:', error);
     },
@@ -148,7 +187,13 @@ export const BudgetService = {
             'comfort': 'Conforto',
             'goals': 'Metas',
             'pleasures': 'Prazeres',
-            'knowledge': 'Conhecimento'
+            'knowledge': 'Conhecimento',
+            // Business
+            'operational_costs': 'Custos Operacionais',
+            'supplies': 'Insumos e Materiais',
+            'team': 'Equipe e Terceirizados',
+            'taxes': 'Impostos e Taxas',
+            'profit': 'Lucro e Reservas'
         };
         return labels[category] || category;
     },
@@ -160,9 +205,22 @@ export const BudgetService = {
             'comfort': '#f472b6', // Pink
             'goals': '#c084fc', // Purple
             'pleasures': '#fb923c', // Orange
-            'knowledge': '#fbbf24' // Yellow
+            'knowledge': '#fbbf24', // Yellow
+            // Business
+            'operational_costs': '#ef4444',
+            'supplies': '#f97316',
+            'team': '#3b82f6',
+            'taxes': '#eab308',
+            'profit': '#22c55e'
         };
         return colors[category] || '#ccc';
+    },
+
+    getAllocations(context = 'personal') {
+        const contextAllocations = this.allocations.filter(a => a.context === context);
+        // If empty for this context (and defaults failed), return defaults directly
+        if (contextAllocations.length === 0) return this.getDefaultAllocations(context);
+        return contextAllocations;
     },
 
     /**
@@ -222,3 +280,5 @@ export const BudgetService = {
         });
     }
 };
+
+

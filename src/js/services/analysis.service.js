@@ -66,3 +66,4 @@ export const AnalysisService = {
         return { label: 'Crítico', color: 'text-red-500' };
     }
 };
+

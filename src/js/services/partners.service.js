@@ -95,3 +95,5 @@ export const PartnersService = {
         return this.partners.find(p => p.id === id);
     }
 };
+
+

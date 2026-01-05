@@ -3,12 +3,24 @@ import { supabase } from './supabase.service.js';
 
 const SYNC_QUEUE_KEY = 'moneta_sync_queue';
 
+// Import will be done dynamically to avoid circular dependencies
+let syncIndicator = null;
+
 export const SyncService = {
     queue: [],
+    isSyncing: false,
 
     init() {
         this.queue = StoreService.get(SYNC_QUEUE_KEY) || [];
         window.addEventListener('online', () => this.processQueue());
+
+        // Import sync indicator dynamically
+        import('../ui/sync-indicator.js').then(module => {
+            syncIndicator = module.syncIndicator;
+        }).catch(err => {
+            console.warn('Could not load sync indicator:', err);
+        });
+
         // Try to process immediately if online
         if (navigator.onLine) {
             this.processQueue();
@@ -47,16 +59,25 @@ export const SyncService = {
     async processQueue() {
         if (this.queue.length === 0) return;
         if (!navigator.onLine) return;
+        if (this.isSyncing) return; // Prevent concurrent syncs
 
+        this.isSyncing = true;
         console.log('Processing sync queue:', this.queue.length, 'operations');
 
+        // Show sync indicator
+        if (syncIndicator) {
+            syncIndicator.show();
+        }
+
         const remainingQueue = [];
+        let hasError = false;
 
         for (const op of this.queue) {
             try {
                 await this.executeOperation(op);
             } catch (error) {
                 console.error('Sync operation failed:', error);
+                hasError = true;
                 op.retryCount++;
                 // If failed less than 3 times, keep in queue
                 if (op.retryCount < 3) {
@@ -67,6 +88,16 @@ export const SyncService = {
 
         this.queue = remainingQueue;
         this.saveQueue();
+        this.isSyncing = false;
+
+        // Show result
+        if (syncIndicator) {
+            if (hasError) {
+                syncIndicator.showError();
+            } else {
+                syncIndicator.showSuccess();
+            }
+        }
     },
 
     async executeOperation(op) {
@@ -88,5 +119,18 @@ export const SyncService = {
                 if (deleteError) throw deleteError;
                 break;
         }
+    },
+
+    /**
+     * Get current sync status
+     */
+    getStatus() {
+        return {
+            isSyncing: this.isSyncing,
+            queueLength: this.queue.length,
+            hasPendingSync: this.queue.length > 0
+        };
     }
 };
+
+
