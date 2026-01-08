@@ -27,14 +27,21 @@ export const SettingsService = {
     },
 
     // --- CATEGORIES ---
-    async fetchCategories() {
+    async fetchCategories(type = null) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        const { data, error } = await supabase
+
+        let query = supabase
             .from('categories')
             .select('*')
             .eq('user_id', user.id)
             .order('name');
+
+        if (type) {
+            query = query.eq('type', type);
+        }
+
+        const { data, error } = await query;
 
         if (!error && data) {
             this.categories = data;
@@ -46,6 +53,11 @@ export const SettingsService = {
     async createCategory(category) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not found');
+
+        // Validation for new 'type' field
+        if (!category.type || !['INCOME', 'EXPENSE'].includes(category.type)) {
+            throw new Error("Category 'type' is required and must be 'INCOME' or 'EXPENSE'.");
+        }
 
         const payload = { ...category, user_id: user.id };
         const { data, error } = await supabase.from('categories').insert(payload).select().single();

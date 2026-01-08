@@ -14,37 +14,32 @@
     <link rel="manifest" href="/manifest.json">
     <style>
         :root {
-            /* LIGHT MODE (Premium) */
-            --brand-bg: #f8fafc;
-            /* Slate 50 */
-            --brand-surface: #ffffff;
-            /* White */
-            --brand-surface-light: #f1f5f9;
-            /* Slate 100 */
-            --brand-text-primary: #0f172a;
-            /* Slate 900 */
-            --brand-text-secondary: #475569;
-            /* Slate 600 */
-            --brand-border: #e2e8f0;
-            /* Slate 200 */
-            --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -1px rgb(0 0 0 / 0.03);
-            /* Softer shadow */
+            /* LIGHT MODE (Executive Premium) */
+            --brand-bg: #F8F9FA;         /* background.light */
+            --brand-surface: #FFFFFF;    /* background.card_light */
+            --brand-surface-light: #F1F5F9; /* text.primary_dark (used as light surface/hover) */
+            --brand-text-primary: #1E293B;  /* text.primary_light */
+            --brand-text-secondary: #64748B; /* text.secondary_light */
+            --brand-border: #E2E8F0;     /* Slate-200 (kept for subtle borders) */
+            
+            /* Shadows for depth */
+            --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            
+            /* Status Colors mapped to vars for internal usage consistency */
+            --color-success: #059669;
+            --color-danger: #DC2626;
+            --color-warning: #D97706;
         }
 
         .dark {
-            /* DARK MODE (True Dark) */
-            --brand-bg: #0a0a0a;
-            /* Neutral 950 (Almost Black) */
-            --brand-surface: #171717;
-            /* Neutral 900 */
-            --brand-surface-light: #262626;
-            /* Neutral 800 */
-            --brand-text-primary: #fafafa;
-            /* Neutral 50 */
-            --brand-text-secondary: #a3a3a3;
-            /* Neutral 400 */
-            --brand-border: #262626;
-            /* Neutral 800 */
+            /* DARK MODE (Executive Navy) */
+            --brand-bg: #0B1120;         /* background.dark */
+            --brand-surface: #151E32;    /* background.card_dark */
+            --brand-surface-light: #1E293B; /* text.primary_light (used as dark surface/hover) */
+            --brand-text-primary: #F1F5F9;  /* text.primary_dark */
+            --brand-text-secondary: #94A3B8; /* text.secondary_dark */
+            --brand-border: #1E293B;     /* Slate-800 */
+            
             --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         }
 
@@ -61,6 +56,7 @@
                         sans: ['Inter', 'sans-serif'],
                     },
                     colors: {
+                        // Semantic Vars (Backward Compatibility + Theme Switching)
                         'brand-bg': 'var(--brand-bg)',
                         'brand-surface': 'var(--brand-surface)',
                         'brand-surface-light': 'var(--brand-surface-light)',
@@ -68,17 +64,43 @@
                         'brand-text-secondary': 'var(--brand-text-secondary)',
                         'brand-border': 'var(--brand-border)',
 
-                        // Brand Colors
-                        'brand-green': '#10b981', // Emerald 500 (Brighter for dark mode visibility)
-                        'brand-green-light': '#34d399',
-                        'brand-gold': '#f59e0b', // Amber 500
-                        'brand-gold-light': '#fbbf24',
-                        'brand-red': '#ef4444', // Red 500
-                        'brand-red-light': '#f87171',
+                        // --- NEW EXECUTIVE SYSTEM ---
+                        // Base (Fundos)
+                        background: {
+                            light: '#F8F9FA', // Off-white executivo
+                            dark: '#0B1120',  // Navy muito profundo
+                            card_light: '#FFFFFF',
+                            card_dark: '#151E32', // Navy ligeiramente mais claro
+                        },
+                        // Textos
+                        text: {
+                            primary_light: '#1E293B', // Slate-800
+                            primary_dark: '#F1F5F9',  // Slate-100
+                            secondary_light: '#64748B', // Slate-500
+                            secondary_dark: '#94A3B8',  // Slate-400
+                        },
+                        // Marca (Brand - Azul Executivo)
+                        brand: {
+                            DEFAULT: '#0F52BA', // Default for 'bg-brand'
+                            500: '#0F52BA', // Azul Safira (Sóbrio)
+                            600: '#0A3B8C', // Hover
+                            dark_accent: '#3B82F6', // Azul mais vibrante
+                        },
+                        // Status & Acentos (Premium)
+                        accent: {
+                            gold: '#D97706', // Ouro (Amber-600)
+                            success: '#059669', // Emerald-600
+                            danger: '#DC2626', // Red-600
+                        },
+                        
+                        // Legacy Mappings (soft deprecation or mapped to new)
+                        'brand-green': '#059669', // Mapped to accent.success
+                        'brand-gold': '#D97706',  // Mapped to accent.gold
+                        'brand-red': '#DC2626',   // Mapped to accent.danger
                     },
                     boxShadow: {
-                        'glow-green': '0 0 20px -5px rgba(16, 185, 129, 0.15)',
-                        'glow-gold': '0 0 20px -5px rgba(245, 158, 11, 0.15)',
+                        'glow-green': '0 0 20px -5px rgba(5, 150, 105, 0.15)',
+                        'glow-gold': '0 0 20px -5px rgba(217, 119, 6, 0.15)',
                         'card-sm': 'var(--shadow-card)',
                     }
                 }

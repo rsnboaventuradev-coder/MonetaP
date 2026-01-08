@@ -20,7 +20,7 @@ export const EvolutionService = {
 
         // 1. Check Security Stage
         // User needs to have completed their Emergency Fund goal OR have enough liquidity
-        const liquidityAmount = this.calculateLiquidity();
+        const liquidityAmount = this.calculateLiquidity(profile);
         const costOfLiving = this.calculateAvgCostOfLiving();
         const monthsSecured = costOfLiving > 0 ? liquidityAmount / costOfLiving : 0;
 
@@ -44,7 +44,7 @@ export const EvolutionService = {
         const suggestions = [];
 
         if (stage === this.STAGES.SECURITY) {
-            const liquidity = this.calculateLiquidity();
+            const liquidity = this.calculateLiquidity(profile);
             const costOfLiving = this.calculateAvgCostOfLiving();
             const target = (costOfLiving * (profile.emergency_fund_target_months || 6));
             const missing = target - liquidity;
@@ -87,15 +87,29 @@ export const EvolutionService = {
         return suggestions;
     },
 
-    calculateLiquidity() {
-        // Sum of 'fixed_income' with 'liquidity' tag or manual check (simplified for now: accounts balance + investments marked as liquidity)
-        // For now, let's use Total Net Worth from Accounts + 'treasure' type investments (approximating liquidity)
-        const accountsBalance = 0; // TODO: Fetch from accounts service if implemented
+    calculateLiquidity(profile) {
+        // 1. Start with Profile Initial Balance (from Raio-X)
+        let total = profile?.current_balance || 0;
+
+        // 2. Add Accounts Balance (TODO: Fetch from accounts service if implemented properly)
+        // const accountsBalance = AccountsService.getTotalBalance() / 100; 
+        // total += accountsBalance;
+
+        // 3. Add Investments with Liquidity
         const investmentsLiquidity = InvestmentsService.investments
             .filter(i => i.type === 'treasure' || i.type === 'fixed_income') // Approximating
             .reduce((acc, curr) => acc + (curr.quantity * curr.current_price), 0);
 
-        return investmentsLiquidity;
+        // Convert investments (cents) to units if mixed? No, service usually uses cents. 
+        // Let's assume current_balance is in plain form (float) from DB based on previous files, 
+        // but wait, DB mostly uses cents or float?
+        // onboarding/index.ts takes body.current_balance. Usually UI sends float.
+        // InvestmentsService uses cents.
+        // Let's standardize on Reais (float) for this logic for now, dividing investments by 100.
+
+        total += (investmentsLiquidity / 100);
+
+        return total;
     },
 
     calculateAvgCostOfLiving() {

@@ -1,7 +1,48 @@
 import { TransactionService } from './transaction.service.js';
+import { SupabaseService } from './supabase.service.js';
 import { Toast } from '../utils/toast.js';
 
 export const ReportsService = {
+    /**
+     * Get expense/income breakdown by category
+     * @param {'income'|'expense'} type 
+     * @param {number} month 1-12
+     * @param {number} year 
+     */
+    async getBreakdown(type, month, year) {
+        try {
+            const query = new URLSearchParams({ type, month, year }).toString();
+            const { data, error } = await SupabaseService.client.functions.invoke(`reports/breakdown?${query}`, {
+                method: 'GET'
+            });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('ReportsService.getBreakdown error:', error);
+            Toast.show('Erro ao carregar relatório: ' + error.message, 'error');
+            throw error;
+        }
+    },
+
+    /**
+     * Get evolution of income vs expense
+     * @param {number} months default 6
+     */
+    async getEvolution(months = 6) {
+        try {
+            const query = new URLSearchParams({ months }).toString();
+            const { data, error } = await SupabaseService.client.functions.invoke(`reports/evolution?${query}`, {
+                method: 'GET'
+            });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('ReportsService.getEvolution error:', error);
+            Toast.show('Erro ao carregar evolução: ' + error.message, 'error');
+            throw error;
+        }
+    },
+
     /**
      * Export transactions to CSV
      * @param {number} month - 0-11
@@ -51,5 +92,3 @@ export const ReportsService = {
         document.body.removeChild(link);
     }
 };
-
-

@@ -2,6 +2,7 @@ import { supabase, SupabaseService } from './supabase.service.js';
 import { SyncService } from './sync.service.js';
 import { StoreService } from './store.service.js';
 import { Observable } from '../utils/observer.js';
+import { MoneyHelper } from '../utils/money.js';
 
 const CACHE_KEY_TRANSACTIONS = 'moneta_transactions_cache';
 
@@ -54,7 +55,7 @@ export const TransactionService = {
         // Convert pro_labore_amount from reais to centavos for comparison
         // profile.pro_labore_amount is stored as reais (e.g., 3500.00)
         // tx.amount is stored as centavos (e.g., 350000)
-        const proLaboreAmountCents = Math.round(profile.pro_labore_amount * 100);
+        const proLaboreAmountCents = MoneyHelper.toCents(profile.pro_labore_amount);
 
         // 2. Check if transactions exist for this month
         // We look for a VERY specific pattern: matching amount, context, and description for this month
@@ -62,7 +63,7 @@ export const TransactionService = {
             const txDate = new Date(tx.date);
             return txDate.getMonth() === month &&
                 txDate.getFullYear() === year &&
-                tx.amount == proLaboreAmountCents &&
+                parseInt(tx.amount) === proLaboreAmountCents &&
                 (
                     (tx.context === 'business' && tx.type === 'expense' && tx.description === 'Pró-Labore (Saída PJ)') ||
                     (tx.context === 'personal' && tx.type === 'income' && tx.description === 'Pró-Labore (Entrada PF)')
@@ -143,17 +144,21 @@ export const TransactionService = {
 
                 await this.create({
                     description: rule.description,
-                    amount: rule.amount,
+                    amount: rule.amount, // Amount from DB is Cents
+                    amountIsCents: true, // IMPORTANT: Tell create that this is already cents
                     type: rule.type,
-                    category: rule.category,
-                    context: rule.context,
-                    date: today.toISOString(),
-                    status: 'pending'
+                    date: new Date(currentYear, currentMonth, rule.day_of_month).toISOString(),
+                    category_id: rule.category,
+                    user_id: user.id,
+                    context: 'personal', // Default or add context to recurring table? Assuming personal for now.
+                    status: 'pending', // Generated transactions are pending? Or paid? Logic says "Upcoming" -> pending.
+                    recurring_origin_id: rule.id
                 });
 
+                // Update last_generated
                 await supabase
                     .from('recurring_transactions')
-                    .update({ last_generated: today.toISOString() })
+                    .update({ last_generated: new Date().toISOString() })
                     .eq('id', rule.id);
             }
         }
@@ -240,12 +245,37 @@ export const TransactionService = {
         const user = session?.user;
         if (!user) throw new Error('User not logged in');
 
-        // Convert Amount to Cents (Integer)
-        // Check if amount is float string "10.50" or number 10.50
+        // Standardize Amount to Cents (Integer)
+        // Input `transaction.amount` might be "10.50" (Reais string), 10.50 (Reais float), or 1050 (Cents integer already?)
+        // HINT: The UI usually sends "10.50" (raw value from unmaskToFloat).
+        // WE WILL USE MoneyHelper.toCents() which assumes input is REAIS if it looks floating/string.
         let amountInCents = 0;
         if (transaction.amount !== undefined) {
-            // If we suspect input is "10.50" (Float) -> 1050
-            amountInCents = Math.round(parseFloat(transaction.amount) * 100);
+            // Case: Logic might pass '1050' (cents) directly?
+            // If we are unsure, we assume the Service Contract is: "Inputs are REAIS (float/string) unless specified".
+            // However, recurring transactions pass `rule.amount` which is cents from DB.
+            // Problem: `MoneyHelper.toCents(1050)` -> 105000 (Incorrect!)
+
+            // FIX: We need a reliable way. 
+            // 1. If logic calling `create` is internal (like recursing), it sends Cents.
+            // 2. If logic is UI, it sends Reais.
+
+            // To be safe: checks magnitude? No, risky.
+            // Decision: `create` accepts REAIS by default (backward compat). 
+            // Callers that have Cents must convert or we allow a flag.
+
+            // Wait, manual fix: Recurring logic (lines 106+) gets `rule.amount` from DB (BIGINT/Cents).
+            // It calls `this.create`. If `create` blindly multiplies by 100, we break it.
+            // Strategy: Check if `rule.amount` is explicitly handled. 
+
+            // UPDATED STRATEGY: `create` expects REAIS. 
+            // Recurring/Internal callers MUST convert to Reais before calling OR we add `amountIsCents: true`.
+
+            if (transaction.amountIsCents) {
+                amountInCents = parseInt(transaction.amount);
+            } else {
+                amountInCents = MoneyHelper.toCents(transaction.amount);
+            }
         }
 
         const newTx = {
@@ -277,13 +307,10 @@ export const TransactionService = {
 
     async createInstallments(data) {
         const { installmentsCount, ...transaction } = data;
-        const totalAmount = parseFloat(transaction.amount); // float
-        const installmentValue = totalAmount / installmentsCount;
 
-        // Handle cents rounding manually to avoid "losing" cents
-        // Example: 100 / 3 = 33.333... -> 33.33 * 3 = 99.99 (miss 1 cent)
-        // Better: work with CENTS.
-        const totalCents = Math.round(totalAmount * 100);
+        // Input is likely Reais (from UI). Convert to Cents first.
+        const totalCents = MoneyHelper.toCents(transaction.amount);
+
         const installmentCents = Math.floor(totalCents / installmentsCount);
         const remainderCents = totalCents % installmentsCount;
 
@@ -327,7 +354,8 @@ export const TransactionService = {
             const newTx = {
                 ...transaction,
                 description: `${transaction.description} (${i + 1}/${installmentsCount})`,
-                amount: currentAmountFloat, // create() handles conversion to cents again, so create() expects FLOAT.
+                amount: currentAmountCents,
+                amountIsCents: true, // Flag to tell create() values are already correct
                 date: date.toISOString(),
                 status: (i === 0 && transaction.status === 'paid') ? 'paid' : 'pending' // Only first is paid? Or all? Usually installments are "Future" so pending. User can change. 
                 // If I pay with Credit Card, effectively I "spent" it, but the bill comes later.
@@ -349,13 +377,51 @@ export const TransactionService = {
         await Promise.all(promises);
     },
 
+    async createRecurring(transaction) {
+        const session = await SupabaseService.getSession();
+        const user = session?.user;
+        if (!user) throw new Error('User not logged in');
+
+        // Prepare data for recurring_transactions table
+        // Amount should be stored as CENTS (BigInt)
+        const amountInCents = MoneyHelper.toCents(transaction.amount);
+
+        const newRule = {
+            user_id: user.id,
+            description: transaction.description,
+            amount: amountInCents,
+            day_of_month: transaction.day_of_month || 1,
+            type: transaction.type, // 'income' or 'expense'
+            category: transaction.categoryId || transaction.category_id || null,
+            active: true,
+            created_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('recurring_transactions')
+            .insert([newRule])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Optionally trigger check immediately to generate for this month if applicable
+        await this.checkRecurringTransactions();
+
+        return data;
+    },
+
     async update(id, updates) {
         const index = this.transactions.findIndex(t => t.id === id);
         if (index === -1) return;
 
         const dbUpdates = { ...updates };
         if (updates.amount !== undefined) {
-            dbUpdates.amount = Math.round(parseFloat(updates.amount) * 100);
+            if (updates.amountIsCents) {
+                dbUpdates.amount = parseInt(updates.amount);
+            } else {
+                dbUpdates.amount = MoneyHelper.toCents(updates.amount);
+            }
         }
         // Map categoryId to category_id for Supabase
         if (updates.categoryId !== undefined) {

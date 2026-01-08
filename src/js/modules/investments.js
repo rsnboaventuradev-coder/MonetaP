@@ -1,4 +1,5 @@
 import { InvestmentsService } from '../services/investments.service.js';
+import { EvolutionService } from '../services/evolution.service.js';
 import { AnalysisService } from '../services/analysis.service.js';
 import { TransactionService } from '../services/transaction.service.js';
 import { AccountsService } from '../services/accounts.service.js';
@@ -44,7 +45,7 @@ export const InvestmentsModule = {
 
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('birth_date,monthly_income')
+                .select('birth_date,monthly_income,risk_profile,emergency_fund_target_months,current_balance')
                 .eq('id', user.id)
                 .maybeSingle();
             this.userProfile = profile;
@@ -73,6 +74,22 @@ export const InvestmentsModule = {
     },
 
     renderView(container) {
+        // --- 0. SAFETY MODE & DISCLAIMER CHECK ---
+        const stage = EvolutionService.calculateStage(this.userProfile);
+
+        // C1: Safety Mode (Reserva Insuficiente)
+        if (stage === EvolutionService.STAGES.SECURITY) {
+            this.renderSafetyMode(container);
+            return;
+        }
+
+        // C2: Disclaimer (Only if approved for Accumulation/Freedom)
+        const disclaimerAccepted = localStorage.getItem('invest_disclaimer_accepted');
+        if (!disclaimerAccepted) {
+            this.renderDisclaimer(container);
+            return;
+        }
+
         // Tag container content for easy check
         // We will wrap content in investments-container class
 
@@ -298,6 +315,101 @@ export const InvestmentsModule = {
         });
 
         this.addListeners();
+    },
+
+
+    renderSafetyMode(container) {
+        const liquidity = EvolutionService.calculateLiquidity(this.userProfile);
+        const costOfLiving = EvolutionService.calculateAvgCostOfLiving();
+        const targetMonths = this.userProfile?.emergency_fund_target_months || 6;
+        const targetAmount = costOfLiving * targetMonths;
+        const missing = Math.max(0, targetAmount - liquidity);
+        const progress = Math.min(100, (liquidity / targetAmount) * 100);
+
+        container.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center bg-brand-bg px-6 text-center space-y-6 animate-fade-in safe-area-top">
+                <div class="w-24 h-24 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 relative">
+                    <div class="absolute inset-0 rounded-full border-2 border-blue-500/30 animate-ping opacity-20"></div>
+                    <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+
+                <h2 class="text-2xl font-black text-brand-text-primary uppercase tracking-tight">Modo Segurança Ativo</h2>
+                <p class="text-brand-text-secondary max-w-xs leading-relaxed">
+                    Para acessar investimentos de maior risco, você precisa completar sua 
+                    <strong class="text-blue-400">Reserva de Emergência</strong>.
+                </p>
+
+                <div class="w-full max-w-sm bg-brand-surface border border-brand-border rounded-2xl p-6">
+                    <div class="flex justify-between items-end mb-2">
+                        <span class="text-xs font-bold text-brand-text-secondary uppercase">Progresso</span>
+                        <span class="text-2xl font-black text-blue-400">${progress.toFixed(0)}%</span>
+                    </div>
+                    <div class="w-full bg-black/30 rounded-full h-3 mb-4 overflow-hidden">
+                        <div class="bg-blue-500 h-full rounded-full transition-all duration-1000" style="width: ${progress}%"></div>
+                    </div>
+                    <p class="text-xs text-brand-text-secondary">
+                        Faltam <strong class="text-brand-text-primary relative value-sensitive">R$ ${(missing / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para o objetivo.
+                        <br>
+                        (Liquidez Atual: R$ ${(liquidity / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                    </p>
+                </div>
+
+                <button onclick="window.app.navigateTo('goals')" class="w-full max-w-xs bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition transform active:scale-95">
+                    Focar na Reserva
+                </button>
+                
+                <button onclick="window.app.navigateTo('dashboard')" class="text-sm text-brand-text-secondary hover:text-brand-text-primary transition underline decoration-brand-text-secondary/30">
+                    Voltar ao Dashboard
+                </button>
+            </div>
+        `;
+    },
+
+    renderDisclaimer(container) {
+        container.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center bg-brand-bg px-6 text-center space-y-8 animate-fade-in safe-area-top">
+                <div class="w-20 h-20 rounded-2xl bg-brand-gold/20 flex items-center justify-center rotate-3 hover:rotate-6 transition duration-500">
+                    <svg class="w-10 h-10 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+
+                <div class="space-y-4 max-w-sm">
+                    <h2 class="text-3xl font-black text-brand-text-primary tracking-tight">Aviso Legal</h2>
+                    <p class="text-sm text-brand-text-secondary leading-relaxed">
+                        Você está prestes a acessar a área de <strong>Investimentos</strong>.
+                    </p>
+                    <div class="bg-brand-surface/50 border border-brand-border rounded-xl p-4 text-left">
+                        <ul class="space-y-3 text-xs text-brand-text-secondary list-disc pl-4">
+                            <li>Investimentos envolvem riscos, incluindo a perda do capital investido.</li>
+                            <li>A rentabilidade passada não garante rentabilidade futura.</li>
+                            <li>Certifique-se de que seu perfil de risco é compatível com os ativos escolhidos.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <button id="accept-disclaimer-btn" class="w-full max-w-xs bg-brand-gold hover:bg-yellow-400 text-brand-bg font-bold py-4 rounded-xl shadow-glow-gold transition transform active:scale-95">
+                    Estou Ciente e Quero Continuar
+                </button>
+                
+                 <button onclick="window.app.navigateTo('dashboard')" class="text-sm text-brand-text-secondary hover:text-brand-text-primary transition">
+                    Cancelar
+                </button>
+            </div>
+        `;
+
+        // Add Logic for Button
+        setTimeout(() => {
+            const btn = document.getElementById('accept-disclaimer-btn');
+            if (btn) {
+                btn.onclick = () => {
+                    localStorage.setItem('invest_disclaimer_accepted', 'true');
+                    this.render(); // Re-render to bypass check
+                };
+            }
+        }, 100);
     },
 
     getFilterName(filter) {

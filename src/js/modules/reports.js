@@ -64,7 +64,7 @@ export const ReportsModule = {
         let income = 0;
         let expense = 0;
         transactions.forEach(tx => {
-            const amount = parseFloat(tx.amount);
+            const amount = parseFloat(tx.amount) / 100;
             if (tx.type === 'income') income += amount;
             else expense += amount;
         });
@@ -82,7 +82,7 @@ export const ReportsModule = {
             // Let's aggregate by Description for now to show *something*.
 
             const cat = tx.description ? tx.description.split(' ')[0] : 'Outros';
-            categories[cat] = (categories[cat] || 0) + parseFloat(tx.amount);
+            categories[cat] = (categories[cat] || 0) + (parseFloat(tx.amount) / 100);
         });
 
         const catLabels = Object.keys(categories);

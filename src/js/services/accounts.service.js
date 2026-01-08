@@ -1,5 +1,6 @@
 import { supabase, SupabaseService } from './supabase.service.js';
 import { StoreService } from './store.service.js';
+import { MoneyHelper } from '../utils/money.js';
 
 const CACHE_KEY_ACCOUNTS = 'moneta_accounts';
 
@@ -43,7 +44,7 @@ export const AccountsService = {
             .insert({
                 ...accountData,
                 user_id: user.id,
-                current_balance: accountData.initial_balance || 0
+                current_balance: MoneyHelper.toCents(accountData.initial_balance)
             })
             .select()
             .single();
@@ -57,10 +58,20 @@ export const AccountsService = {
     },
 
     async update(id, updates) {
+        const dbUpdates = { ...updates };
+
+        // Convert monetary values to Cents if present
+        if (updates.current_balance !== undefined) {
+            dbUpdates.current_balance = MoneyHelper.toCents(updates.current_balance);
+        }
+        if (updates.initial_balance !== undefined) {
+            dbUpdates.initial_balance = MoneyHelper.toCents(updates.initial_balance);
+        }
+
         const { data, error } = await supabase
             .from('accounts')
             .update({
-                ...updates,
+                ...dbUpdates,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id)
@@ -125,9 +136,15 @@ export const AccountsService = {
         // Create two transactions (expense from source, income to destination)
         const TransactionService = (await import('./transaction.service.js')).TransactionService;
 
+        // Transfers usually come as Reais from UI (e.g. 50.00)
+        // TransactionService.create expects Reais by default (without amountIsCents flag)
+        // IF 'amount' passed here is Reais, we just pass it along.
+        // IF 'amount' is Cents, we must use flag.
+        // Assuming Transfers come from UI -> Reais.
+
         await TransactionService.create({
             type: 'expense',
-            amount,
+            amount: amount,
             description: `Transferência: ${description || 'Sem descrição'}`,
             date: date || new Date().toISOString().split('T')[0],
             account_id: fromAccountId,
@@ -136,7 +153,7 @@ export const AccountsService = {
 
         await TransactionService.create({
             type: 'income',
-            amount,
+            amount: amount,
             description: `Transferência: ${description || 'Sem descrição'}`,
             date: date || new Date().toISOString().split('T')[0],
             account_id: toAccountId,
@@ -195,7 +212,10 @@ export const AccountsService = {
     getEmergencyFundStatus(monthlyCost, targetMonths = 6) {
         const emergencyAccounts = this.accounts.filter(a => a.is_emergency_fund && a.is_active);
         const currentAmount = emergencyAccounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
-        const goalAmount = (monthlyCost || 5000) * 100 * targetMonths; // Convert to cents
+
+        // monthlyCost usually comes as Reais from Profile/Input
+        const monthlyCostCents = MoneyHelper.toCents(monthlyCost || 5000);
+        const goalAmount = monthlyCostCents * targetMonths;
         const progress = goalAmount > 0 ? Math.min((currentAmount / goalAmount) * 100, 100) : 0;
 
         return {

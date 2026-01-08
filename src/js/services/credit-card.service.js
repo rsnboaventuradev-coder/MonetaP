@@ -1,5 +1,6 @@
 import { SupabaseService } from './supabase.service.js';
 import { Observable } from '../utils/observer.js';
+import { MoneyHelper } from '../utils/money.js';
 
 const supabase = SupabaseService.client;
 
@@ -57,7 +58,7 @@ export const CreditCardService = {
             bank: cardData.bank || null,
             last_digits: cardData.last_digits || null,
             billing_day: parseInt(cardData.billing_day),
-            credit_limit: cardData.credit_limit ? Math.round(parseFloat(cardData.credit_limit) * 100) : null,
+            credit_limit: MoneyHelper.toCents(cardData.credit_limit),
             context: cardData.context || 'personal',
             current_invoice: 0,
             active: true
@@ -80,7 +81,7 @@ export const CreditCardService = {
         const dbUpdates = { ...updates };
 
         if (updates.credit_limit !== undefined) {
-            dbUpdates.credit_limit = Math.round(parseFloat(updates.credit_limit) * 100);
+            dbUpdates.credit_limit = MoneyHelper.toCents(updates.credit_limit);
         }
 
         dbUpdates.updated_at = new Date().toISOString();
@@ -121,7 +122,7 @@ export const CreditCardService = {
         const user = session?.user;
         if (!user) throw new Error('User not authenticated');
 
-        const amountCents = Math.round(parseFloat(purchaseData.amount) * 100);
+        const amountCents = MoneyHelper.toCents(purchaseData.amount);
 
         // Calculate billing month based on card's billing day and purchase date
         const purchaseDate = new Date(purchaseData.purchase_date || new Date());

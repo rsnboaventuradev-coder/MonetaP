@@ -389,7 +389,18 @@ export const WalletModule = {
                 }
             });
         }
-        if (this.dom.form) this.dom.form.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
+        if (this.dom.form) {
+            this.dom.form.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
+
+            // Listen for Type changes to filter categories
+            const typeRadios = this.dom.form.querySelectorAll('input[name="type"]');
+            typeRadios.forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    const newType = e.target.value; // 'income' or 'expense'
+                    this.renderCategoryOptions(newType);
+                });
+            });
+        }
 
         // Search
         const searchInput = document.getElementById('transactionDetailsSearch');
@@ -977,13 +988,25 @@ export const WalletModule = {
         return map[method] || method;
     },
 
-    renderCategoryOptions() {
+    renderCategoryOptions(filterType = null) {
         if (!this.dom.categorySelect) return;
+
+        // Save current selection to restore if valid
+        const currentVal = this.dom.categorySelect.value;
 
         this.dom.categorySelect.innerHTML = '<option value="" disabled selected>Selecione...</option>';
 
+        let categoriesToRender = this.state.categories;
+
+        if (filterType) {
+            // Filter categories: match type OR type is null (legacy/universal)
+            categoriesToRender = categoriesToRender.filter(cat =>
+                !cat.type || cat.type.toUpperCase() === filterType.toUpperCase()
+            );
+        }
+
         // Agrupar por tipo (Receita/Despesa) pode ser uma melhoria visual
-        this.state.categories.forEach(cat => {
+        categoriesToRender.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
             // Emoji ou nada se for class icon - verificação de null/undefined
@@ -991,6 +1014,13 @@ export const WalletModule = {
             option.text = `${icon} ${cat.name} `;
             this.dom.categorySelect.appendChild(option);
         });
+
+        // Restore selection if it still exists in the filtered list
+        if (currentVal && categoriesToRender.some(c => c.id == currentVal)) {
+            this.dom.categorySelect.value = currentVal;
+        } else {
+            this.dom.categorySelect.value = ""; // Reset if invalid
+        }
     },
 
     setLoading(isLoading, isReset) {
@@ -1247,7 +1277,8 @@ export const WalletModule = {
 
             // Format existing value for mask
             if (amountInput) {
-                const amountInCents = Math.round(transaction.amount * 100);
+                // transaction.amount is already in Cents (Integer)
+                const amountInCents = transaction.amount;
                 amountInput.value = typeof CurrencyMask !== 'undefined' ? CurrencyMask.format(amountInCents.toString()) : transaction.amount;
             }
 
@@ -1284,7 +1315,20 @@ export const WalletModule = {
             }
         }
 
-        this.dom.modal.classList.remove('hidden');
+        if (this.dom.modal) this.dom.modal.classList.remove('hidden');
+
+        // Initial Filter
+        const initialType = transaction ? transaction.type : (isRecurringDefault ? 'expense' : 'expense');
+        // Note: Default to expense if nothing, or check radio
+        const currentTypeRadio = this.dom.form.querySelector('input[name="type"]:checked');
+        const typeToFilter = currentTypeRadio ? currentTypeRadio.value : initialType;
+
+        this.renderCategoryOptions(typeToFilter);
+
+        // Restore category if editing
+        if (mode === 'edit' && transaction) {
+            this.dom.form.querySelector('[name="categoryId"]').value = transaction.category_id;
+        }
 
         this.setupValidationListeners();
         this.validateForm();
@@ -1313,11 +1357,11 @@ export const WalletModule = {
             if (tx.type === 'income') {
                 totalIncome += amount;
                 const source = tx.description || 'Outros';
-                incomesBySource[source] = (incomesBySource[source] || 0) + amount;
+                incomesBySource[source] = (incomesBySource[source] || 0) + (amount / 100);
             } else if (tx.type === 'expense') {
                 totalExpenses += amount;
                 const catName = tx.categories?.name || tx.category_name || 'Outros';
-                expensesByCategory[catName] = (expensesByCategory[catName] || 0) + amount;
+                expensesByCategory[catName] = (expensesByCategory[catName] || 0) + (amount / 100);
             }
         });
 

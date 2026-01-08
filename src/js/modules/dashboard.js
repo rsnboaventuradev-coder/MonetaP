@@ -6,9 +6,11 @@ import { BudgetService } from '../services/budget.service.js';
 import { AccountsService } from '../services/accounts.service.js';
 import { GamificationService } from '../services/gamification.service.js';
 import { SupabaseService } from '../services/supabase.service.js';
+import { ReportsService } from '../services/reports.service.js';
 
 export const DashboardModule = {
     currentContext: 'personal', // 'personal' | 'business'
+    selectedDate: new Date(),
     chartInstances: {},
 
     unsubscribers: [],
@@ -20,9 +22,15 @@ export const DashboardModule = {
         // 1. Initial Guard
         if (window.app.currentView !== 'dashboard') return;
 
-        // Clean up old listeners
+        // Clean up old listeners and charts
         this.unsubscribers.forEach(unsub => unsub());
         this.unsubscribers = [];
+
+        // Destroy old chart instances to prevent leaks
+        if (this.chartInstances) {
+            Object.values(this.chartInstances).forEach(chart => chart.destroy());
+        }
+        this.chartInstances = {};
 
         // Show Skeleton while loading (Sync operation, safe)
         this.renderSkeleton(container);
@@ -110,9 +118,9 @@ export const DashboardModule = {
             if (profile && profile.monthly_income) avgCostOfLiving = parseFloat(profile.monthly_income);
         }
 
-        const today = new Date();
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
+        const currentMonth = this.selectedDate.getMonth();
+        const currentYear = this.selectedDate.getFullYear();
+        const monthLabel = this.selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
         // 1. BALANCES
         const walletBalance = AccountsService.getTotalBalance() / 100; // Contas em centavos
@@ -120,18 +128,8 @@ export const DashboardModule = {
         const totalNetWorth = walletBalance + investmentsBalance;
 
         // 2. MONTHLY SUMMARY (Income vs Expense)
-        const dre = TransactionService.getFinancialStatement(currentMonth, currentYear, 'personal'); // Defaulting to personal for main view or aggregate? User said "Overview". Let's use currentContext.
-
-        // We need to aggregate contextual data if currentContext is 'all' or specific.
         // Assuming currentContext affects what we show.
         const summaryStats = TransactionService.getFinancialStatement(currentMonth, currentYear, this.currentContext === 'all' ? undefined : this.currentContext);
-
-        // 3. HISTORY (Last 6 Months)
-        // We need a helper to get last 6 months data.
-        const historyData = this.getLast6MonthsHistory();
-
-        // 4. CATEGORY BREAKDOWN (Current Month)
-        const categoriesData = this.getCategoryBreakdown(currentMonth, currentYear);
 
         // 5. RECENT TRANSACTIONS
         const recentTransactions = TransactionService.transactions
@@ -141,43 +139,63 @@ export const DashboardModule = {
 
         // --- HTML CONSTRUCTION ---
         container.innerHTML = `
-            <div class="dashboard-container flex flex-col min-h-full bg-brand-bg safe-area-top pb-24 space-y-6">
+            <div class="dashboard-container flex flex-col min-h-full bg-background-light dark:bg-background-dark safe-area-top pb-24 space-y-6 transition-colors duration-300">
                 
                 <!-- HEADER -->
-                <div class="px-6 pt-6 flex justify-between items-center bg-brand-bg sticky top-0 z-20 pb-4 border-b border-brand-border backdrop-blur-md">
+                <div class="px-6 pt-6 flex justify-between items-center bg-background-light/80 dark:bg-background-dark/80 sticky top-0 z-20 pb-4 border-b border-slate-200 dark:border-slate-800 backdrop-blur-md transition-colors duration-300">
                     <div>
-                        <p class="text-xs text-brand-text-secondary font-medium uppercase tracking-wider">Dashboard</p>
-                        <h1 class="text-2xl font-bold text-brand-text-primary leading-none mt-1">Visão Geral</h1>
+                        <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark font-medium uppercase tracking-wider">Dashboard</p>
+                        <h1 class="text-2xl font-bold text-text-primary_light dark:text-text-primary_dark leading-none mt-1">Visão Geral</h1>
                     </div>
                     <div class="flex items-center gap-3">
-                         <button onclick="window.app.togglePrivacy()" class="text-brand-text-secondary hover:text-brand-text-primary transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                         <button onclick="window.app.togglePrivacy()" class="text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <div class="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs cursor-pointer hover:bg-brand-gold/30 transition">
+                        <div class="w-8 h-8 rounded-full bg-accent-gold/20 flex items-center justify-center text-accent-gold font-bold text-xs cursor-pointer hover:bg-accent-gold/30 transition shadow-sm">
                             ${user?.email?.charAt(0).toUpperCase() || 'U'}
                         </div>
                     </div>
                 </div>
 
+                <!-- MONTH SELECTOR -->
+                <div class="px-6 flex items-center justify-between">
+                    <button onclick="window.app.changeDashboardMonth(-1)" class="w-10 h-10 rounded-full bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 flex items-center justify-center text-text-secondary_light dark:text-text-secondary_dark hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-text-primary_light dark:hover:text-text-primary_dark transition shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                    <span class="text-sm font-black text-text-primary_light dark:text-text-primary_dark uppercase tracking-widest bg-background-card_light dark:bg-background-card_dark px-6 py-2 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
+                        ${monthLabel}
+                    </span>
+                    <button onclick="window.app.changeDashboardMonth(1)" class="w-10 h-10 rounded-full bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 flex items-center justify-center text-text-secondary_light dark:text-text-secondary_dark hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-text-primary_light dark:hover:text-text-primary_dark transition shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- MINI ONBOARDING WIDGET (Injected if needed) -->
+                <div id="mini-onboarding-container" class="px-6 empty:hidden"></div>
+
                 <!-- 1. TOTAL BALANCE CARD -->
                 <div class="px-6">
-                    <div class="bg-gradient-to-br from-brand-surface to-brand-surface-light rounded-3xl p-6 border border-brand-border shadow-2xl relative overflow-hidden group">
-                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32 text-brand-gold" viewBox="0 0 20 20" fill="currentColor">
+                    <div class="bg-gradient-to-br from-background-card_light via-white to-slate-50 dark:from-background-card_dark dark:via-background-card_dark dark:to-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none relative overflow-hidden group">
+                         <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32 text-brand-500" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
                             </svg>
                          </div>
                          <div class="relative z-10">
-                            <p class="text-brand-text-secondary text-xs font-bold uppercase tracking-wider mb-1">Patrimônio Total</p>
-                            <h2 class="text-4xl font-black text-brand-text-primary tracking-tight value-sensitive">
+                            <p class="text-text-secondary_light dark:text-text-secondary_dark text-xs font-bold uppercase tracking-wider mb-2">Patrimônio Total</p>
+                            <h2 class="text-4xl font-black text-text-primary_light dark:text-text-primary_dark tracking-tight value-sensitive">
                                 ${totalNetWorth.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </h2>
-                            <div class="mt-4 flex gap-4 text-xs font-medium text-brand-text-secondary">
-                                <span>🏦 Contas: <span class="text-brand-text-primary value-sensitive">${walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
-                                <span>📈 Invest: <span class="text-brand-text-primary value-sensitive">${investmentsBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
+                            <div class="mt-4 flex gap-4 text-xs font-medium text-text-secondary_light dark:text-text-secondary_dark">
+                                <span class="flex items-center gap-1">🏦 Contas: <span class="text-text-primary_light dark:text-text-primary_dark value-sensitive font-bold">${walletBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
+                                <span class="flex items-center gap-1">📈 Invest: <span class="text-text-primary_light dark:text-text-primary_dark value-sensitive font-bold">${investmentsBalance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span></span>
                             </div>
                          </div>
                     </div>
@@ -185,22 +203,22 @@ export const DashboardModule = {
 
                 <!-- 2. MONTHLY SUMMARY WIDGET -->
                 <div class="px-6 grid grid-cols-2 gap-3">
-                    <div class="bg-brand-surface/50 p-4 rounded-2xl border border-brand-border shadow-card-sm hover:shadow-md hover:border-brand-green/30 transition-all flex flex-col justify-between cursor-pointer">
-                         <div class="w-8 h-8 rounded-full bg-brand-green/20 text-brand-green flex items-center justify-center mb-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group">
+                         <div class="w-8 h-8 rounded-lg bg-accent-success/10 text-accent-success flex items-center justify-center mb-3 group-hover:bg-accent-success/20 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                          </div>
                          <div>
-                             <p class="text-[10px] text-brand-text-secondary uppercase font-bold">Receitas</p>
-                             <p class="text-lg font-bold text-brand-text-primary value-sensitive">${((summaryStats.income || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                             <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark uppercase font-bold tracking-wide">Receitas</p>
+                             <p class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark value-sensitive mt-0.5">${((summaryStats.income || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                          </div>
                     </div>
-                    <div class="bg-brand-surface/50 p-4 rounded-2xl border border-brand-border shadow-card-sm hover:shadow-md hover:border-brand-red/30 transition-all flex flex-col justify-between cursor-pointer">
-                         <div class="w-8 h-8 rounded-full bg-brand-red/20 text-brand-red flex items-center justify-center mb-2">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group">
+                         <div class="w-8 h-8 rounded-lg bg-accent-danger/10 text-accent-danger flex items-center justify-center mb-3 group-hover:bg-accent-danger/20 transition">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                          </div>
                          <div>
-                             <p class="text-[10px] text-brand-text-secondary uppercase font-bold">Despesas</p>
-                             <p class="text-lg font-bold text-brand-text-primary value-sensitive">${((summaryStats.expense || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                             <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark uppercase font-bold tracking-wide">Despesas</p>
+                             <p class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark value-sensitive mt-0.5">${((summaryStats.expense || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                          </div>
                     </div>
                 </div>
@@ -213,79 +231,50 @@ export const DashboardModule = {
 
                 <!-- 3. FINANCIAL HISTORY (Chart) -->
                 <div class="px-6">
-                    <h3 class="text-sm font-bold text-brand-text-secondary uppercase mb-3 px-1">Histórico (6 Meses)</h3>
-                    <div class="bg-brand-surface p-4 rounded-2xl border border-brand-border h-48 flex items-end justify-between gap-2 overflow-hidden relative shadow-card-sm">
-                        <!-- Horizontal Grid Lines -->
-                        <div class="absolute inset-0 flex flex-col justify-between pointer-events-none p-4 opacity-10">
-                            <div class="border-t border-white"></div>
-                            <div class="border-t border-white"></div>
-                            <div class="border-t border-white"></div>
-                        </div>
-
-                        ${historyData.map(month => {
-            const maxVal = Math.max(...historyData.map(h => Math.max(h.income, h.expense))) || 1;
-            const hIncome = (month.income / maxVal) * 100;
-            const hExpense = (month.expense / maxVal) * 100;
-
-            return `
-                                <div class="flex flex-col items-center justify-end h-full flex-1 gap-1">
-                                    <div class="w-full flex gap-1 items-end justify-center h-full">
-                                        <div class="w-2 bg-brand-green/80 rounded-t-sm transition-all hover:bg-brand-green" style="height: ${Math.max(hIncome, 5)}%"></div>
-                                        <div class="w-2 bg-brand-red/80 rounded-t-sm transition-all hover:bg-brand-red" style="height: ${Math.max(hExpense, 5)}%"></div>
-                                    </div>
-                                    <span class="text-[9px] text-brand-text-secondary font-bold uppercase">${month.label}</span>
-                                </div>
-                            `;
-        }).join('')}
+                    <h3 class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase mb-3 px-1 tracking-wider">Fluxo de Caixa (6 Meses)</h3>
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-4 rounded-xl border border-slate-200 dark:border-slate-700 h-64 shadow-sm relative">
+                         <canvas id="cash-flow-chart"></canvas>
                     </div>
                 </div>
 
                 <!-- 4. CATEGORY BREAKDOWN -->
                 <div class="px-6">
                     <div class="flex justify-between items-center mb-3 px-1">
-                         <h3 class="text-sm font-bold text-brand-text-secondary uppercase">Top Categorias</h3>
-                         <button onclick="window.app.navigateTo('settings')" class="text-[10px] text-brand-gold font-bold uppercase hover:underline">Gerenciar Tags</button>
+                         <h3 class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wider">Despesas por Categoria</h3>
+                         <button onclick="window.app.navigateTo('settings')" class="text-[10px] text-brand-500 font-bold uppercase hover:underline">Gerenciar Tags</button>
                     </div>
-                    <div class="bg-brand-surface rounded-2xl border border-brand-border overflow-hidden shadow-card-sm">
-                        ${categoriesData.length > 0 ? categoriesData.map(cat => `
-                            <div class="p-4 border-b border-brand-border last:border-0 flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs" style="background-color: ${cat.color}20; color: ${cat.color}">
-                                        ${cat.icon.includes('fa-') ? '<i class="' + cat.icon + '"></i>' : cat.icon}
-                                    </div>
-                                    <div>
-                                        <p class="text-sm font-bold text-brand-text-primary">${cat.name}</p>
-                                        <div class="w-24 h-1.5 bg-brand-surface-light rounded-full mt-1 overflow-hidden">
-                                            <div class="h-full rounded-full" style="width: ${cat.percentage}%; background-color: ${cat.color}"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="text-xs font-bold text-brand-text-secondary value-sensitive">${(cat.total / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center relative">
+                        <div class="h-64 w-full relative">
+                            <canvas id="expenses-chart"></canvas>
+                            <!-- Center Text Overlay -->
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark font-medium">Total</p>
+                                <p id="expenses-chart-total" class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark">R$ ...</p>
                             </div>
-                        `).join('') : '<div class="p-4 text-center text-brand-text-secondary text-xs">Sem dados para este mês.</div>'}
+                        </div>
                     </div>
                 </div>
 
                 <!-- 5. RECENT TRANSACTIONS -->
                 <div class="px-6 pb-6">
                     <div class="flex justify-between items-center mb-3 px-1">
-                        <h3 class="text-sm font-bold text-brand-text-secondary uppercase">Últimas Transações</h3>
-                        <button onclick="window.app.navigateTo('wallet')" class="text-[10px] text-brand-gold font-bold uppercase hover:underline">Ver Todas</button>
+                        <h3 class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wider">Últimas Transações</h3>
+                        <button onclick="window.app.navigateTo('wallet')" class="text-[10px] text-brand-500 font-bold uppercase hover:underline">Ver Todas</button>
                     </div>
                     <div class="space-y-3">
                         ${recentTransactions.map(t => {
             const isExpense = t.type === 'expense';
-            const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
+            const colorClass = isExpense ? 'text-accent-danger' : 'text-accent-success';
             const sign = isExpense ? '-' : '+';
             return `
-                                <div class="bg-brand-surface p-4 rounded-2xl border border-brand-border flex items-center justify-between shadow-card-sm">
+                                <div class="bg-background-card_light dark:bg-background-card_dark p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                                     <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-full bg-brand-surface-light flex items-center justify-center text-lg">
+                                        <div class="w-10 h-10 rounded-full bg-background-light dark:bg-slate-800 flex items-center justify-center text-lg border border-slate-100 dark:border-slate-700">
                                             ${t.category_icon && !t.category_icon.includes('fa-') ? t.category_icon : '💸'}
                                         </div>
                                         <div>
-                                            <p class="text-sm font-bold text-brand-text-primary truncate max-w-[150px]">${t.description}</p>
-                                            <p class="text-[10px] text-brand-text-secondary">${new Date(t.date).toLocaleDateString('pt-BR')}</p>
+                                            <p class="text-sm font-bold text-text-primary_light dark:text-text-primary_dark truncate max-w-[150px]">${t.description}</p>
+                                            <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark">${new Date(t.date).toLocaleDateString('pt-BR')}</p>
                                         </div>
                                     </div>
                                     <span class="text-sm font-bold ${colorClass} value-sensitive">${sign} ${(parseFloat(t.amount) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
@@ -295,33 +284,173 @@ export const DashboardModule = {
                     </div>
                 </div>
                 
+                <!-- VERSION FOOTER -->
+                <div class="px-6 pb-6 text-center">
+                    <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest opacity-50">Moneta v1.0.0</p>
+                </div>
+
                 <!-- MODAL (Integrated for Quick Actions) -->
                 ${this.renderModalID()}
             </div>
         `;
 
         this.addModalListeners(container);
+
+        // Render Charts after DOM update
+        await this.renderCharts(currentMonth, currentYear);
     },
 
-    getLast6MonthsHistory() {
-        const history = [];
-        const today = new Date();
+    async renderCharts(month, year) {
+        try {
+            // --- CASH FLOW CHART ---
+            const flowCtx = document.getElementById('cash-flow-chart');
+            if (flowCtx) {
+                const evolutionData = await ReportsService.getEvolution(6);
 
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            const month = d.getMonth();
-            const year = d.getFullYear();
-            const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                this.chartInstances.cashFlow = new Chart(flowCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: evolutionData.map(d => d.month),
+                        datasets: [
+                            {
+                                label: 'Receitas',
+                                data: evolutionData.map(d => d.income / 100), // Convert cents
+                                backgroundColor: '#10b981',
+                                borderRadius: 4,
+                                barPercentage: 0.6,
+                                categoryPercentage: 0.8
+                            },
+                            {
+                                label: 'Despesas',
+                                data: evolutionData.map(d => d.expense / 100), // Convert cents
+                                backgroundColor: '#ef4444',
+                                borderRadius: 4,
+                                barPercentage: 0.6,
+                                categoryPercentage: 0.8
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    label: function (context) {
+                                        return context.dataset.label + ': ' +
+                                            context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                                    }
+                                },
+                                backgroundColor: 'rgba(23, 23, 23, 0.9)',
+                                titleColor: '#fff',
+                                bodyColor: '#fff',
+                                borderColor: '#333',
+                                borderWidth: 1
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false, drawBorder: false },
+                                ticks: { color: '#94a3b8', font: { size: 10 } }
+                            },
+                            y: {
+                                grid: { color: '#33415520', drawBorder: false },
+                                ticks: { display: false }
+                            }
+                        },
+                        interaction: {
+                            mode: 'nearest',
+                            axis: 'x',
+                            intersect: false
+                        }
+                    }
+                });
+            }
 
-            const stats = TransactionService.getFinancialStatement(month, year, this.currentContext === 'all' ? undefined : this.currentContext);
-            history.push({
-                label,
-                income: stats.revenue,
-                expense: stats.expenses
-            });
+            // --- EXPENSES BREAKDOWN CHART ---
+            const expenseCtx = document.getElementById('expenses-chart');
+            if (expenseCtx) {
+                let breakdownData = await ReportsService.getBreakdown('expense', month + 1, year);
+
+                // Grouping Logic: Top 5 + Others
+                if (breakdownData.length > 5) {
+                    const top5 = breakdownData.slice(0, 5);
+                    const others = breakdownData.slice(5);
+                    const othersTotal = others.reduce((sum, item) => sum + item.total, 0);
+
+                    if (othersTotal > 0) {
+                        top5.push({
+                            category: 'Outros',
+                            total: othersTotal,
+                            color: '#94a3b8', // Slate 400
+                            percentage: 0 // Will be calc by chart or ignored
+                        });
+                    }
+                    breakdownData = top5;
+                }
+
+                // Update Total Text
+                const totalVal = breakdownData.reduce((acc, item) => acc + (item.total || 0), 0);
+
+                const totalEl = document.getElementById('expenses-chart-total');
+                if (totalEl) totalEl.textContent = (totalVal / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                this.chartInstances.expenses = new Chart(expenseCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: breakdownData.map(d => d.category),
+                        datasets: [{
+                            data: breakdownData.map(d => d.total / 100), // Convert cents
+                            backgroundColor: breakdownData.map(d => d.color || '#cbd5e1'),
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '75%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#94a3b8',
+                                    font: { size: 10 },
+                                    usePointStyle: true,
+                                    boxWidth: 8
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        const val = context.raw;
+                                        // Calculate percentage based on displayed data
+                                        const tot = context.chart._metasets[context.datasetIndex].total;
+                                        const pct = ((val / tot) * 100).toFixed(0);
+                                        return context.label + ': ' +
+                                            val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) +
+                                            ' (' + pct + '%)';
+                                    }
+                                },
+                                backgroundColor: 'rgba(23, 23, 23, 0.9)',
+                                bodyColor: '#fff',
+                                borderColor: '#333',
+                                borderWidth: 1
+                            }
+                        }
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('Error rendering charts:', error);
         }
-        return history;
     },
+
+
 
     renderEmergencyFundCard(monthlyCost) {
         const emergencyStatus = AccountsService.getEmergencyFundStatus(monthlyCost, 6);
@@ -462,47 +591,7 @@ export const DashboardModule = {
         `;
     },
 
-    getCategoryBreakdown(month, year) {
-        // Filter transactions for specific month/year and type=expense
-        let txs = TransactionService.transactions.filter(t => {
-            const d = new Date(t.date);
-            return d.getMonth() === month &&
-                d.getFullYear() === year &&
-                t.type === 'expense';
-        });
 
-        if (this.currentContext !== 'all') {
-            txs = txs.filter(t => t.context === this.currentContext);
-        }
-
-        const totalExpense = txs.reduce((acc, t) => acc + parseFloat(t.amount), 0);
-        if (totalExpense === 0) return [];
-
-        // Group by Category Name
-        const map = {};
-        txs.forEach(t => {
-            const catName = t.category_name || 'Geral'; // Assuming join was done or name provided
-            // NOTE: TransactionService usually provides category_name if joined. If not, might be ID. 
-            // In wallet.js we saw `t.category_name`. Assuming it's available.
-
-            if (!map[catName]) {
-                map[catName] = {
-                    name: catName,
-                    total: 0,
-                    color: t.category_color || '#6B7280',
-                    icon: t.category_icon || '🏷️'
-                };
-            }
-            map[catName].total += parseFloat(t.amount);
-        });
-
-        const sorted = Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5);
-
-        return sorted.map(c => ({
-            ...c,
-            percentage: ((c.total / totalExpense) * 100).toFixed(0)
-        }));
-    },
 
     renderModalID() {
         const isBusiness = this.currentContext === 'business';
@@ -510,16 +599,16 @@ export const DashboardModule = {
 
         return `
             <div id="dashboard-tx-modal" class="fixed inset-0 z-50 hidden">
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity duration-300" id="close-dash-modal-overlay"></div>
+                <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300" id="close-dash-modal-overlay"></div>
                 
-                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-brand-border rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6 shrink-0"></div>
+                <div class="absolute bottom-0 w-full max-w-lg left-1/2 -translate-x-1/2 bg-background-card_light dark:bg-background-card_dark border-t border-slate-200 dark:border-slate-800 rounded-t-[2rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
+                    <div class="w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
                     
                     <div class="flex justify-between items-center mb-4 shrink-0">
-                        <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
+                        <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark flex items-center gap-2">
                              Nova Operação
                         </h3>
-                        <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-dash-modal-btn">
+                        <button class="bg-slate-100 dark:bg-slate-800 rounded-full p-2 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark transition" id="close-dash-modal-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
@@ -528,45 +617,45 @@ export const DashboardModule = {
                     
                     <form id="dash-tx-form" class="space-y-6 overflow-y-auto custom-scrollbar flex-1 pr-1">
                         <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Valor</label>
+                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Valor</label>
                             <div class="relative group">
-                                <span class="absolute left-0 top-1/2 -translate-y-1/2 text-brand-text-secondary text-2xl font-light group-focus-within:text-brand-green-light transition">R$</span>
+                                <span class="absolute left-0 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark text-2xl font-light group-focus-within:text-brand-500 transition">R$</span>
                                 <input type="number" step="0.01" name="amount" id="dash-amount-input" required 
-                                    class="w-full bg-transparent text-5xl font-black text-brand-text-primary border-none focus:ring-0 pl-10 placeholder-gray-800 p-0 caret-brand-green" 
+                                    class="w-full bg-transparent text-5xl font-black text-text-primary_light dark:text-text-primary_dark border-none focus:ring-0 pl-10 placeholder-slate-300 dark:placeholder-slate-700 p-0 caret-brand-500" 
                                     placeholder="0,00">
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-4">
-                            <label class="relative flex flex-col items-center justify-center p-4 rounded-2xl border border-brand-border bg-brand-bg/30 cursor-pointer overflow-hidden group hover:bg-brand-bg/50 transition">
+                            <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background-light dark:bg-slate-800/50 cursor-pointer overflow-hidden group hover:bg-slate-50 dark:hover:bg-slate-800 transition">
                                 <input type="radio" name="type" value="income" class="peer hidden">
-                                <div class="absolute inset-0 border-2 border-brand-green opacity-0 peer-checked:opacity-100 rounded-2xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-brand-green/20 text-brand-green mb-2 flex items-center justify-center group-hover:scale-110 transition">
+                                <div class="absolute inset-0 border-2 border-accent-success opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
+                                <div class="w-10 h-10 rounded-full bg-accent-success/20 text-accent-success mb-2 flex items-center justify-center group-hover:scale-110 transition">
                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                                 </div>
-                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-brand-green transition">Entrada</span>
+                                <span class="font-bold text-sm text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-success transition">Entrada</span>
                             </label>
-                             <label class="relative flex flex-col items-center justify-center p-4 rounded-2xl border border-brand-border bg-brand-bg/30 cursor-pointer overflow-hidden group hover:bg-brand-bg/50 transition">
+                             <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background-light dark:bg-slate-800/50 cursor-pointer overflow-hidden group hover:bg-slate-50 dark:hover:bg-slate-800 transition">
                                 <input type="radio" name="type" value="expense" class="peer hidden" checked>
-                                <div class="absolute inset-0 border-2 border-brand-red opacity-0 peer-checked:opacity-100 rounded-2xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-brand-red/20 text-brand-red mb-2 flex items-center justify-center group-hover:scale-110 transition">
+                                <div class="absolute inset-0 border-2 border-accent-danger opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
+                                <div class="w-10 h-10 rounded-full bg-accent-danger/20 text-accent-danger mb-2 flex items-center justify-center group-hover:scale-110 transition">
                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                                 </div>
-                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-brand-red transition">Saída</span>
+                                <span class="font-bold text-sm text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-danger transition">Saída</span>
                             </label>
                         </div>
                         
                         <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Descrição</label>
+                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Descrição</label>
                             <input type="text" name="description" id="dash-desc-input" required 
-                                class="w-full bg-[#27272a] rounded-2xl border border-brand-border p-4 text-white focus:border-brand-green focus:ring-1 focus:ring-brand-green outline-none transition placeholder-gray-500 font-medium"
+                                class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-medium"
                                 placeholder="O que foi isso?">
                         </div>
 
                          <!-- Dynamic Fields based on global context would be ideal, but for Quick Action we simplify -->
                         <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Categoria / Contexto</label>
-                            <select name="category" class="w-full bg-[#27272a] rounded-2xl border border-brand-border p-4 text-white focus:border-brand-green outline-none appearance-none">
+                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Categoria / Contexto</label>
+                            <select name="category" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 outline-none appearance-none">
                                 <option value="general">Geral</option>
                                 <option value="food">Alimentação</option>
                                 <option value="transport">Transporte / Uber</option>
@@ -578,15 +667,15 @@ export const DashboardModule = {
 
                         ${partners.length > 0 ? `
                         <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Vincular a Parceiro (Opcional)</label>
-                            <select name="partner_id" class="w-full bg-[#27272a] rounded-2xl border border-brand-border p-4 text-white focus:border-brand-green outline-none appearance-none">
+                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Vincular a Parceiro (Opcional)</label>
+                            <select name="partner_id" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 outline-none appearance-none">
                                 <option value="" selected>Nenhum</option>
                                 ${partners.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                             </select>
                         </div>
                         ` : ''}
 
-                        <button type="submit" class="w-full bg-gradient-to-r from-brand-green to-brand-green-light text-brand-text-primary font-bold text-lg py-4 rounded-2xl shadow-glow-green active:scale-[0.98] transition mt-6">
+                        <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium text-lg py-4 rounded-xl shadow-sm hover:shadow-md active:scale-[0.98] transition mt-6">
                             Confirmar Lançamento
                         </button>
                     </form>
@@ -641,7 +730,14 @@ export const DashboardModule = {
 };
 
 // Expose functions to window
+// Expose functions to window
 window.app = window.app || {};
+
+window.app.changeDashboardMonth = (delta) => {
+    DashboardModule.selectedDate.setMonth(DashboardModule.selectedDate.getMonth() + delta);
+    DashboardModule.render();
+};
+
 window.app.toggleDashboardContext = (ctx) => {
     DashboardModule.currentContext = ctx;
     DashboardModule.render();
