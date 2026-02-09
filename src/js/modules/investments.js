@@ -1,3 +1,4 @@
+import { GoalsService } from '../services/goals.service.js';
 import { InvestmentsService } from '../services/investments.service.js';
 import { EvolutionService } from '../services/evolution.service.js';
 import { AnalysisService } from '../services/analysis.service.js';
@@ -21,6 +22,7 @@ export const InvestmentsModule = {
         this.activeTab = this.activeTab || 'resumo';
         this.listFilter = null; // Reset filter on full render
 
+        await GoalsService.init(); // Init Goals to check for Emergency Fund completion
         await InvestmentsService.init();
         await TransactionService.init();
         await AccountsService.init();
@@ -74,20 +76,28 @@ export const InvestmentsModule = {
     },
 
     renderView(container) {
-        // --- 0. SAFETY MODE & DISCLAIMER CHECK ---
+        // --- 0. SAFETY MODE CHECK (Selective Blocking) ---
         const stage = EvolutionService.calculateStage(this.userProfile);
+        const isSafetyMode = stage === EvolutionService.STAGES.SECURITY;
 
-        // C1: Safety Mode (Reserva Insuficiente)
-        if (stage === EvolutionService.STAGES.SECURITY) {
+        // If in Safety Mode AND trying to access restricted tabs, show Safety Screen
+        if (isSafetyMode && ['variable', 'crypto'].includes(this.activeTab)) {
             this.renderSafetyMode(container);
             return;
         }
 
-        // C2: Disclaimer (Only if approved for Accumulation/Freedom)
-        const disclaimerAccepted = localStorage.getItem('invest_disclaimer_accepted');
-        if (!disclaimerAccepted) {
-            this.renderDisclaimer(container);
-            return;
+        // C2: Disclaimer (Only if accessing risky assets or if not accepted yet generally?)
+        // Let's keep disclaimer for general access if not in safety mode, 
+        // OR maybe only for variable/crypto too. For now keep as is for general access but maybe skip if just Fixed?
+        // Let's enforce disclaimer only if NOT in safety mode (implied you are advancing) AND haven't accepted.
+        // But if user is just doing Fixed Income, maybe no disclaimer needed?
+        // Let's keep it simple: If stage > SECURITY, check disclaimer.
+        if (!isSafetyMode) {
+            const disclaimerAccepted = localStorage.getItem('invest_disclaimer_accepted');
+            if (!disclaimerAccepted) {
+                this.renderDisclaimer(container);
+                return;
+            }
         }
 
         // Tag container content for easy check
@@ -318,53 +328,170 @@ export const InvestmentsModule = {
     },
 
 
-    renderSafetyMode(container) {
-        const liquidity = EvolutionService.calculateLiquidity(this.userProfile);
+    async renderSafetyMode(container) {
+        // Ensure data is fresh
+        if (!GoalsService.goals || GoalsService.goals.length === 0) {
+            console.warn('⚠️ Investments: GoalsService empty, forcing refresh...');
+            await GoalsService.init();
+        }
+
+        console.log('🔍 Investments Safety Check: Scanning Goals...', GoalsService.goals);
+
+        // 1. Check for Completed Goal
+        const completedEmergencyGoal = GoalsService.goals.find(g =>
+            (g.name.toLowerCase().includes('reserva') || g.type === 'security') &&
+            (g.status === 'completed' || (g.current_amount >= g.target_amount && g.target_amount > 0))
+        );
+
+        let liquidity = EvolutionService.calculateLiquidity(this.userProfile);
         const costOfLiving = EvolutionService.calculateAvgCostOfLiving();
         const targetMonths = this.userProfile?.emergency_fund_target_months || 6;
         const targetAmount = costOfLiving * targetMonths;
-        const missing = Math.max(0, targetAmount - liquidity);
-        const progress = Math.min(100, (liquidity / targetAmount) * 100);
+
+        let progress = Math.min(100, (liquidity / targetAmount) * 100);
+        let missing = Math.max(0, targetAmount - liquidity);
+
+        // Override if goal is explicitly completed
+        if (completedEmergencyGoal) {
+            progress = 100;
+            missing = 0;
+            liquidity = targetAmount;
+
+            // Auto-unlock via setTimeout to let UI render first (UX)
+            if (completedEmergencyGoal.status === 'completed') {
+                setTimeout(() => {
+                    this.unlockInvestments(completedEmergencyGoal);
+                }, 1500);
+            }
+        }
 
         container.innerHTML = `
-            <div class="h-full flex flex-col items-center justify-center bg-brand-bg px-6 text-center space-y-6 animate-fade-in safe-area-top">
-                <div class="w-24 h-24 rounded-full bg-blue-500/20 flex items-center justify-center mb-4 relative">
-                    <div class="absolute inset-0 rounded-full border-2 border-blue-500/30 animate-ping opacity-20"></div>
-                    <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            <div class="h-full flex flex-col items-center justify-center p-8 text-center animate-fade-in safe-area-top">
+                
+                <div class="w-24 h-24 bg-slate-800 rounded-full flex items-center justify-center mb-6 animate-pulse-slow shadow-lg shadow-blue-900/20">
+                    <svg class="w-10 h-10 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                 </div>
 
-                <h2 class="text-2xl font-black text-brand-text-primary uppercase tracking-tight">Modo Segurança Ativo</h2>
-                <p class="text-brand-text-secondary max-w-xs leading-relaxed">
+                <h2 class="text-2xl font-bold text-white mb-2 tracking-tight">MODO SEGURANÇA ATIVO</h2>
+                <p class="text-slate-400 max-w-sm mx-auto mb-10 text-sm leading-relaxed">
                     Para acessar investimentos de maior risco, você precisa completar sua 
-                    <strong class="text-blue-400">Reserva de Emergência</strong>.
+                    <button onclick="window.app.navigateTo('goals')" class="text-blue-400 font-bold hover:text-blue-300 transition underline decoration-blue-400/30 underline-offset-4">Reserva de Emergência</button>.
                 </p>
 
-                <div class="w-full max-w-sm bg-brand-surface border border-brand-border rounded-2xl p-6">
-                    <div class="flex justify-between items-end mb-2">
-                        <span class="text-xs font-bold text-brand-text-secondary uppercase">Progresso</span>
-                        <span class="text-2xl font-black text-blue-400">${progress.toFixed(0)}%</span>
+                <!-- Progress Bar -->
+                <div class="w-full max-w-sm bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50 shadow-xl mb-8 group hover:border-blue-500/30 transition-all duration-500">
+                    <div class="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+                        <span>Progresso</span>
+                        <span class="${progress >= 100 ? 'text-green-400' : 'text-blue-400'}">${Math.round(progress)}%</span>
                     </div>
-                    <div class="w-full bg-black/30 rounded-full h-3 mb-4 overflow-hidden">
-                        <div class="bg-blue-500 h-full rounded-full transition-all duration-1000" style="width: ${progress}%"></div>
+                    <div class="h-2.5 bg-slate-700 rounded-full overflow-hidden shadow-inner">
+                        <div class="h-full ${progress >= 100 ? 'bg-green-500' : 'bg-gradient-to-r from-blue-600 to-blue-400'} rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" style="width: ${progress}%"></div>
                     </div>
-                    <p class="text-xs text-brand-text-secondary">
-                        Faltam <strong class="text-brand-text-primary relative value-sensitive">R$ ${(missing / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong> para o objetivo.
-                        <br>
-                        (Liquidez Atual: R$ ${(liquidity / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                    <p class="text-xs text-slate-500 mt-4 font-mono">
+                        ${progress >= 100
+                ? '<span class="text-green-400 flex items-center justify-center gap-2">✨ Reserva Completa!</span>'
+                : `Faltam <span class="text-slate-300">R$ ${missing.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span> para o objetivo.`
+            }
                     </p>
                 </div>
 
-                <button onclick="window.app.navigateTo('goals')" class="w-full max-w-xs bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-500/20 transition transform active:scale-95">
-                    Focar na Reserva
-                </button>
+                ${progress >= 100 ? `
+                    <button onclick="window.app.InvestmentsModule.handleManualUnlock()" class="w-full max-w-sm bg-green-500 hover:bg-green-600 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 group">
+                        <span class="text-xl group-hover:scale-110 transition">🔓</span>
+                        Validar & Desbloquear
+                    </button>
+                    <p class="text-xs text-slate-500 mt-2">Clique para confirmar e liberar o acesso.</p>
+                ` : `
+                    <button onclick="window.app.navigateTo('goals')" class="w-full max-w-sm bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-8 rounded-xl shadow-lg shadow-blue-600/20 active:scale-95 transition-all">
+                        Focar na Reserva
+                    </button>
+                    
+                     <button onclick="window.app.InvestmentsModule.verifyEmergencyFundManual()" class="mt-6 text-sm text-slate-500 hover:text-slate-300 transition flex items-center gap-2 py-2 px-4 rounded-lg hover:bg-slate-800/50">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Já completei a reserva
+                    </button>
+                `}
                 
-                <button onclick="window.app.navigateTo('dashboard')" class="text-sm text-brand-text-secondary hover:text-brand-text-primary transition underline decoration-brand-text-secondary/30">
+                <button onclick="window.app.navigateTo('dashboard')" class="mt-8 text-sm text-slate-500 hover:text-slate-300 transition underline decoration-slate-700 underline-offset-4">
                     Voltar ao Dashboard
                 </button>
             </div>
         `;
+    },
+
+    async handleManualUnlock() {
+        try {
+            Toast.show('Validando reserva...', 'info');
+
+            // 1. Try to find existing goal
+            let existingGoal = GoalsService.goals.find(g =>
+                g.name.toLowerCase().includes('reserva') || g.type === 'security'
+            );
+
+            // 2. If not found, create it (System Goal became Real Goal)
+            if (!existingGoal) {
+                console.log('Creating Default System Goal...');
+                existingGoal = await GoalsService.createDefaultEmergencyGoal();
+            }
+
+            // 3. Mark as completed
+            if (existingGoal && existingGoal.status !== 'completed') {
+                const updated = await GoalsService.update(existingGoal.id, { status: 'completed' });
+                if (updated) {
+                    existingGoal.status = 'completed'; // Local update
+                }
+            }
+
+            // 4. Force Unlock logic
+            this.verifyEmergencyFundManual();
+
+        } catch (error) {
+            console.error('Unlock failed', error);
+            Toast.show('Erro ao desbloquear. Tente novamente.', 'error');
+        }
+    },
+
+    async verifyEmergencyFundManual() {
+        const { Toast } = await import('../utils/toast.js');
+        const { GoalsService } = await import('../services/goals.service.js');
+
+        Toast.show({ type: 'info', message: 'Verificando metas...' });
+
+        await GoalsService.init(); // Force fresh fetch
+
+        const goals = GoalsService.goals || [];
+        console.log('🔍 Manual Verify: Found goals:', goals);
+
+        // Lenient check
+        const completedGoal = goals.find(g =>
+            (g.current_amount >= g.target_amount && g.target_amount > 0) ||
+            g.status === 'completed'
+        );
+
+        if (completedGoal) {
+            Toast.show({ type: 'success', message: `Meta encontrada: ${completedGoal.name}! Liberando acesso...` });
+
+            // Update local override if needed or just re-render
+            // We can force re-render which will now pick it up because we just refreshed logic
+            this.render();
+        } else {
+            // List found goals to user to explain why
+            const goalNames = goals.map(g => `${g.name} (${Math.round(g.current_amount / g.target_amount * 100)}%)`).join(', ');
+            Toast.show({
+                type: 'warning',
+                message: `Nenhuma meta completa encontrada. Metas atuais: ${goalNames || 'Nenhuma'}. Certifique-se que o valor atual atingiu a meta.`
+            });
+        }
+    },
+
+    unlockAccumulation() {
+        // Logic to manually refresh or force unlock locally if needed, mainly just refresh view
+        // The checkEmergencyFundUnlock in goals service should have handled DB side.
+        // This is for instant UI feedback.
+        this.activeTab = 'fixed'; // Move to fixed as first step
+        this.render();
     },
 
     renderDisclaimer(container) {
@@ -434,6 +561,7 @@ export const InvestmentsModule = {
             if (idInput) idInput.value = '';
             if (deleteBtn) deleteBtn.classList.add('hidden');
             modal.classList.remove('hidden');
+            setTimeout(() => CurrencyMask.initAll(), 100);
 
             const tickerField = document.getElementById('ticker-field');
             const fiFields = document.getElementById('fixed-income-fields');
@@ -517,12 +645,24 @@ export const InvestmentsModule = {
                 const id = assetData.id;
                 delete assetData.id;
 
-                const numericFields = ['quantity', 'average_price', 'current_price', 'rate', 'dividend_yield', 'p_vp', 'principal_amount', 'current_value'];
-                numericFields.forEach(field => {
+                const currencyFields = ['average_price', 'current_price', 'principal_amount', 'current_value', 'initial_balance'];
+
+                // Parse standard numeric fields
+                ['quantity', 'rate', 'dividend_yield', 'p_vp'].forEach(field => {
                     if (assetData[field] === '' || assetData[field] === undefined) {
                         assetData[field] = null;
                     } else {
                         assetData[field] = parseFloat(assetData[field]);
+                    }
+                });
+
+                // Parse Currency Fields
+                currencyFields.forEach(field => {
+                    if (assetData[field]) {
+                        // Unmask returns float (Reais) for Service to handle conversion
+                        assetData[field] = CurrencyMask.unmaskToFloat(assetData[field]);
+                    } else {
+                        assetData[field] = null;
                     }
                 });
 
@@ -537,6 +677,7 @@ export const InvestmentsModule = {
                         assetData.current_price = assetData.current_value;
                     }
                     if (assetData.principal_amount !== null) {
+                        // Principal Amount is assumed to be average price for fixed income logic in Service
                         assetData.average_price = assetData.principal_amount;
                     }
                     // Fixed income always has quantity = 1
@@ -590,8 +731,8 @@ export const InvestmentsModule = {
             inputs['name'].value = asset.name;
             inputs['type'].value = asset.type;
             inputs['quantity'].value = asset.quantity;
-            inputs['average_price'].value = asset.average_price;
-            inputs['current_price'].value = asset.current_price;
+            inputs['average_price'].value = CurrencyMask.format(asset.average_price.toString());
+            inputs['current_price'].value = CurrencyMask.format(asset.current_price.toString());
 
             if (inputs['issuer']) inputs['issuer'].value = asset.issuer || '';
             const cryptoIssuerInput = inputs['crypto_issuer'];
@@ -602,10 +743,10 @@ export const InvestmentsModule = {
             if (inputs['maturity_date']) inputs['maturity_date'].value = asset.maturity_date || '';
 
             // NEW: Fixed income complete fields
-            if (inputs['principal_amount']) inputs['principal_amount'].value = asset.principal_amount ? (asset.principal_amount / 100) : '';
+            if (inputs['principal_amount']) inputs['principal_amount'].value = asset.principal_amount ? CurrencyMask.format(asset.principal_amount.toString()) : '';
             if (inputs['application_date']) inputs['application_date'].value = asset.application_date || '';
             if (inputs['liquidity']) inputs['liquidity'].value = asset.liquidity || 'daily';
-            if (inputs['current_value']) inputs['current_value'].value = asset.current_price ? (asset.current_price / 100) : '';
+            if (inputs['current_value']) inputs['current_value'].value = (asset.current_price && ['fixed_income', 'treasure'].includes(asset.type)) ? CurrencyMask.format(asset.current_price.toString()) : '';
             if (inputs['entity_context']) inputs['entity_context'].value = asset.entity_context || 'personal';
             if (inputs['is_emergency_fund']) inputs['is_emergency_fund'].checked = asset.is_emergency_fund || false;
 
@@ -620,6 +761,9 @@ export const InvestmentsModule = {
                 typeSelect.value = asset.type;
                 typeSelect.dispatchEvent(new Event('change'));
             }
+
+            // Re-bind masks
+            setTimeout(() => CurrencyMask.initAll(), 100);
         };
 
         // --- ACCOUNT MODAL LISTENERS ---
@@ -638,6 +782,7 @@ export const InvestmentsModule = {
             if (idInput) idInput.value = '';
             if (deleteAccountBtn) deleteAccountBtn.classList.add('hidden');
             accountModal.classList.remove('hidden');
+            setTimeout(() => CurrencyMask.initAll(), 100);
         };
 
         window.app.editAccount = (id) => {
@@ -649,7 +794,7 @@ export const InvestmentsModule = {
             inputs['name'].value = account.name;
             inputs['type'].value = account.type;
             inputs['institution'].value = account.institution || '';
-            inputs['initial_balance'].value = (account.initial_balance / 100).toFixed(2);
+            inputs['initial_balance'].value = CurrencyMask.format(account.initial_balance.toString());
             inputs['color'].value = account.color || '#3B82F6';
             inputs['icon'].value = account.icon || '';
             inputs['include_in_total'].checked = account.include_in_total;
@@ -667,11 +812,9 @@ export const InvestmentsModule = {
                 e.preventDefault();
                 const formData = new FormData(accountForm);
 
-                // Parse initial_balance - use CurrencyMask if value is masked
+                // Parse initial_balance
                 const rawBalance = formData.get('initial_balance');
-                const balance = rawBalance.includes('R$')
-                    ? CurrencyMask.unmask(rawBalance) // returns cents
-                    : Math.round(parseFloat(rawBalance || 0) * 100);
+                const balance = CurrencyMask.unmask(rawBalance);
 
                 const accountData = {
                     name: formData.get('name'),
@@ -1118,12 +1261,15 @@ export const InvestmentsModule = {
 
     renderModal() {
         return `
-            <div id="asset-modal" class="fixed inset-0 z-50 hidden">
+            <div id="asset-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
                 <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity duration-300" id="close-asset-overlay"></div>
-                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-brand-border rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6 shrink-0"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
                     
-                    <div class="flex justify-between items-center mb-4 shrink-0">
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    
+                    <!-- Header (Fixed) -->
+                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
                         <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
                              📈 Novo Ativo
                         </h3>
@@ -1134,7 +1280,8 @@ export const InvestmentsModule = {
                         </button>
                     </div>
 
-                    <form id="asset-form" class="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-1 pb-24">
+                    <!-- Body (Scrollable) -->
+                    <form id="asset-form" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                         <input type="hidden" name="id" id="asset-id">
                         
                         <div>
@@ -1168,7 +1315,7 @@ export const InvestmentsModule = {
 
                             <div>
                                 <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">💰 Valor Aplicado (Principal)</label>
-                                <input type="number" step="0.01" name="principal_amount" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: 10000.00">
+                                <input type="text" name="principal_amount" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
                                 <p class="text-[10px] text-brand-text-secondary mt-1">Montante inicial investido</p>
                             </div>
 
@@ -1211,18 +1358,11 @@ export const InvestmentsModule = {
 
                             <div>
                                 <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">💵 Valor Atual (Atualizado)</label>
-                                <input type="number" step="0.01" name="current_value" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: 10450.00">
+                                <input type="text" name="current_value" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
                                 <p class="text-[10px] text-brand-text-secondary mt-1">Atualize periodicamente para acompanhar rendimentos</p>
                             </div>
 
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">🏢 Vínculo de Entidade</label>
-                                <select name="entity_context" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white appearance-none">
-                                    <option value="personal">👤 Pessoa Física (PF)</option>
-                                    <option value="business">💼 Pessoa Jurídica (PJ)</option>
-                                </select>
-                                <p class="text-[10px] text-brand-text-secondary mt-1">O aporte saiu da conta PF ou PJ? Impacta o fluxo de caixa</p>
-                            </div>
+
 
                             <div class="flex items-center gap-3 bg-blue-500/10 p-4 rounded-xl border border-blue-500/20 mt-2">
                                 <input type="checkbox" name="is_emergency_fund" id="investment-emergency-fund" class="w-5 h-5 rounded accent-blue-500">
@@ -1267,32 +1407,38 @@ export const InvestmentsModule = {
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-blue-500 uppercase tracking-widest mb-2">Preço Médio</label>
-                                <input type="number" step="any" name="average_price" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="0.00">
+                                <input type="text" name="average_price" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
                             </div>
                         </div>
 
                         <div>
                              <label class="block text-xs font-bold text-brand-text-primary uppercase tracking-widest mb-2">Cotação Atual (R$)</label>
-                             <input type="number" step="any" name="current_price" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="0.00">
+                             <input type="text" name="current_price" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
                              <p class="text-[10px] text-brand-text-secondary mt-1">Atualize manualmente.</p>
                         </div>
 
                         <div>
                             <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
-                            <select name="context" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white">
+                            <select name="entity_context" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white">
                                 <option value="personal">👤 Pessoal (PF)</option>
                                 <option value="business">💼 Empresa (PJ)</option>
                             </select>
                             <p class="text-[10px] text-brand-text-secondary mt-1">Separe investimentos pessoais e empresariais</p>
                         </div>
 
-                        <button type="submit" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-brand-darker font-bold py-4 rounded-2xl transition mt-4 shadow-lg shadow-brand-gold/10">
+                        <!-- Spacer for safe area -->
+                        <div class="pb-32 md:pb-0"></div>
+                    </form>
+
+                    <!-- Footer -->
+                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative space-y-3">
+                        <button type="submit" form="asset-form" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-brand-darker font-bold py-4 rounded-2xl transition shadow-lg shadow-brand-gold/10">
                             Salvar Ativo
                         </button>
-                         <button type="button" id="btn-delete-asset" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition mt-2 hover:bg-red-500/20">
+                         <button type="button" id="btn-delete-asset" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition hover:bg-red-500/20">
                             Excluir Ativo
                         </button>
-                    </form>
+                    </div>
                 </div>
             </div>
         `;
@@ -1300,12 +1446,15 @@ export const InvestmentsModule = {
 
     renderAccountModal() {
         return `
-            <div id="account-modal" class="fixed inset-0 z-50 hidden">
+            <div id="account-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
                 <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md" id="close-account-overlay"></div>
-                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-brand-border rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6 shrink-0"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
                     
-                    <div class="flex justify-between items-center mb-4 shrink-0">
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    
+                    <!-- Header -->
+                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
                         <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
                              💳 Nova Conta
                         </h3>
@@ -1316,7 +1465,8 @@ export const InvestmentsModule = {
                         </button>
                     </div>
 
-                    <form id="account-form" class="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-1 pb-24">
+                    <!-- Body -->
+                    <form id="account-form" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                         <input type="hidden" name="id" id="account-id">
 
                         <div>
@@ -1377,14 +1527,20 @@ export const InvestmentsModule = {
                             </select>
                             <p class="text-[10px] text-brand-text-secondary mt-1">Separe contas pessoais e empresariais</p>
                         </div>
-
-                        <button type="submit" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 text-brand-darker font-bold py-4 rounded-2xl transition mt-4 shadow-lg">
+                        
+                        <!-- Spacer -->
+                        <div class="pb-32 md:pb-0"></div>
+                    </form>
+                    
+                    <!-- Footer -->
+                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative space-y-3">
+                        <button type="submit" form="account-form" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 text-brand-darker font-bold py-4 rounded-2xl transition shadow-lg">
                             Salvar Conta
                         </button>
-                        <button type="button" id="btn-delete-account" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition mt-2 hover:bg-red-500/20">
+                        <button type="button" id="btn-delete-account" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition hover:bg-red-500/20">
                             Excluir Conta
                         </button>
-                    </form>
+                    </div>
                 </div>
             </div>
         `;

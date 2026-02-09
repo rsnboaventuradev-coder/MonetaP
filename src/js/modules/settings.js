@@ -1,6 +1,7 @@
 import { SettingsService } from '../services/settings.service.js';
 import { SupabaseService } from '../services/supabase.service.js';
 import { Toast } from '../utils/toast.js';
+import { CurrencyMask } from '../utils/mask.js';
 
 export const SettingsModule = {
     activeTab: 'categories', // 'categories' | 'profile' | 'banking' | 'params'
@@ -67,6 +68,9 @@ export const SettingsModule = {
                 Salvo com sucesso!
             </div>
         `;
+
+        // Initialize masks after render
+        setTimeout(() => CurrencyMask.initAll(), 100);
 
         this.attachListeners();
     },
@@ -238,7 +242,7 @@ export const SettingsModule = {
                         <div class="flex gap-4">
                             <div class="flex-1">
                                 <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Valor Mensal</label>
-                                <input type="number" step="0.01" name="pro_labore_amount" value="${profile.pro_labore_amount || 0}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-green-500 outline-none">
+                                <input type="text" name="pro_labore_amount" data-currency="true" value="${CurrencyMask.format(profile.pro_labore_amount ? (profile.pro_labore_amount * 100).toString() : '0')}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-green-500 outline-none">
                             </div>
                             <div class="w-1/3">
                                 <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Dia</label>
@@ -497,7 +501,7 @@ export const SettingsModule = {
                 const { data: { user } } = await SupabaseService.getSession();
 
                 try {
-                    const amountInCents = Math.round(parseFloat(fd.get('amount')) * 100);
+                    const amountInCents = CurrencyMask.unmask(fd.get('amount')); // Returns integer cents directly
 
                     await SupabaseService.client.from('recurring_transactions').insert({
                         user_id: user.id,
@@ -567,7 +571,11 @@ export const SettingsModule = {
                     console.log(`  Campo ${key}:`, val);
                     // Check if number
                     if (['pro_labore_amount', 'pro_labore_day', 'emergency_fund_months_pf', 'emergency_fund_months_pj'].includes(key)) {
-                        updates[key] = parseFloat(val);
+                        if (key === 'pro_labore_amount') {
+                            updates[key] = CurrencyMask.unmaskToFloat(val); // float Reais
+                        } else {
+                            updates[key] = parseFloat(val);
+                        }
                     } else {
                         updates[key] = val;
                     }
@@ -639,7 +647,7 @@ export const SettingsModule = {
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Valor (R$)</label>
-                                <input type="number" step="0.01" name="amount" placeholder="0,00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none focus:border-blue-500" required>
+                                <input type="text" name="amount" data-currency="true" placeholder="R$ 0,00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none focus:border-blue-500" required>
                             </div>
                             <div>
                                 <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Dia do Mês</label>
@@ -757,18 +765,30 @@ export const SettingsModule = {
         return new Promise((resolve) => {
             // Create modal overlay
             const overlay = document.createElement('div');
-            overlay.className = 'fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-center justify-center p-4';
+            overlay.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
             overlay.id = 'confirm-modal-overlay';
+            overlay.style.zIndex = '9999';
 
             overlay.innerHTML = `
-                <div class="bg-brand-surface rounded-2xl max-w-md w-full p-6 shadow-2xl animate-scale-in">
-                    <h3 class="text-xl font-bold text-brand-text-primary mb-4">${title}</h3>
-                    <p class="text-brand-text-secondary whitespace-pre-line mb-6">${message}</p>
-                    <div class="flex gap-3">
+                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity"></div>
+                <div class="relative w-full max-w-md bg-brand-surface border border-brand-border rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col">
+                    
+                    <!-- Header -->
+                    <div class="p-6 pb-4 border-b border-brand-border shrink-0">
+                        <h3 class="text-xl font-bold text-brand-text-primary">${title}</h3>
+                    </div>
+
+                    <!-- Body -->
+                    <div class="p-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                        <p class="text-brand-text-secondary whitespace-pre-line leading-relaxed">${message}</p>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="p-6 border-t border-brand-border bg-brand-surface shrink-0 flex gap-3">
                         <button id="confirm-modal-cancel" class="flex-1 py-3 px-4 rounded-xl bg-brand-bg text-brand-text-secondary font-medium hover:bg-brand-surface-light transition">
                             Cancelar
                         </button>
-                        <button id="confirm-modal-confirm" class="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition">
+                        <button id="confirm-modal-confirm" class="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition shadow-lg shadow-red-500/20">
                             Confirmar
                         </button>
                     </div>
@@ -789,14 +809,11 @@ export const SettingsModule = {
                 resolve(false);
             });
 
-            // Handle overlay click
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    overlay.remove();
-                    resolve(false);
-                }
+            // Handle overlay click to cancel
+            overlay.querySelector('.bg-brand-bg\\/90').addEventListener('click', () => {
+                overlay.remove();
+                resolve(false);
             });
-
             // Handle escape key
             const escHandler = (e) => {
                 if (e.key === 'Escape') {

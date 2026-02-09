@@ -207,18 +207,23 @@ export const WalletModule = {
             </div>
 
             <!-- MODAL TRANSACTION -->
-            <div id="transactionModal" class="fixed inset-0 z-[200] hidden">
+            <div id="transactionModal" class="fixed inset-0 hidden" style="z-index: 9999;">
                 <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="window.app.WalletModule ? window.app.WalletModule.closeTransactionModal() : null"></div>
-                <div class="absolute bottom-0 w-full bg-brand-surface border-t border-brand-border rounded-t-[2.5rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6 shrink-0"></div>
-                    <div class="flex justify-between items-center mb-6">
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
+                    
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+
+                    <!-- Header (Fixed) -->
+                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
                         <h3 class="modal-title text-xl font-bold text-brand-text-primary">Nova Transação</h3>
                         <button onclick="window.app.WalletModule.closeTransactionModal()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                         </button>
                     </div>
 
-                    <form id="transactionForm" class="flex-1 overflow-y-auto pr-1 flex flex-col gap-6">
+                    <!-- Body (Scrollable) -->
+                    <form id="transactionForm" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                         <div class="bg-[#27272a] rounded-xl p-4">
                             <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
                             <input type="text" inputmode="numeric" id="amountInput" name="amount" data-currency required class="w-full bg-transparent text-4xl font-black text-white border-0 p-0 focus:ring-0 placeholder-gray-500" placeholder="R$ 0,00">
@@ -241,14 +246,25 @@ export const WalletModule = {
                         </div>
 
                         <div>
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
+                            <select id="transactionContext" name="context" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                                <option value="personal">👤 Pessoal (PF)</option>
+                                <option value="business">💼 Empresa (PJ)</option>
+                            </select>
+                            <p class="text-xs text-brand-text-secondary mt-2">Separe despesas pessoais e empresariais</p>
+                        </div>
+
+                        <div>
                             <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Categoria</label>
                             <select id="transactionCategory" name="categoryId" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
                                 <option value="">Carregando...</option>
                             </select>
+                            
+
                         </div>
 
                         <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data</label>
+                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data da Compra</label>
                             <input type="date" name="date" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none scheme-dark">
                         </div>
 
@@ -260,14 +276,7 @@ export const WalletModule = {
                             <p class="text-xs text-brand-text-secondary mt-2">Selecione de onde o dinheiro saiu/entrou</p>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
-                            <select name="context" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
-                                <option value="personal">👤 Pessoal (PF)</option>
-                                <option value="business">💼 Empresa (PJ)</option>
-                            </select>
-                            <p class="text-xs text-brand-text-secondary mt-2">Separe despesas pessoais e empresariais</p>
-                        </div>
+
 
                         <!-- RECURRING TOGGLE -->
                         <div class="bg-brand-surface-light rounded-xl p-4 border border-brand-border">
@@ -297,20 +306,34 @@ export const WalletModule = {
                             </label>
 
                             <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-brand-border animate-fade-in">
-                                <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Número de Parcelas</label>
-                                <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 10">
-                                    <p class="text-xs text-brand-text-secondary mt-2">O valor total será dividido pelo número de parcelas.</p>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Parcelas</label>
+                                        <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 10">
+                                    </div>
+                                    <div>
+                                         <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Vencimento</label>
+                                         <input type="number" name="installmentDay" min="1" max="31" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Dia (Opcional)">
+                                    </div>
+                                </div>
+                                <p class="text-xs text-brand-text-secondary mt-2">O valor total será dividido pelo número de parcelas.</p>
                             </div>
                         </div>
+                        
+                        <!-- Extra padding for scroll safety -->
+                        <div class="pb-32 md:pb-0"></div>
+                    </form>
 
-                        <button type="submit" class="w-full bg-brand-green text-brand-text-primary font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition shrink-0 mt-4">
+                    <!-- Footer (Fixed) -->
+                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="transactionForm" class="w-full bg-brand-green text-brand-text-primary font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition shrink-0">
                             Salvar
                         </button>
-                    </form>
+                    </div>
                 </div>
             </div>
 
-            < !--MODAL DELETE CONFIRMATION-- >
+            <!-- MODAL DELETE CONFIRMATION -->
     <div id="deleteConfirmationModal" class="fixed inset-0 z-[60] hidden">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-4">
@@ -400,6 +423,17 @@ export const WalletModule = {
                     this.renderCategoryOptions(newType);
                 });
             });
+
+            // Listen for Context changes to filter categories (PF vs PJ)
+            const contextSelect = this.dom.form.querySelector('select[name="context"]');
+            if (contextSelect) {
+                contextSelect.addEventListener('change', () => {
+                    // We need current type to know if we should filter expense lists
+                    const currentTypeRadio = this.dom.form.querySelector('input[name="type"]:checked');
+                    const type = currentTypeRadio ? currentTypeRadio.value : 'expense';
+                    this.renderCategoryOptions(type);
+                });
+            }
         }
 
         // Search
@@ -630,14 +664,99 @@ export const WalletModule = {
         // Group by Date
         const grouped = this.groupByDate(transactions);
 
-        this.dom.list.innerHTML = Object.entries(grouped).map(([date, items]) => `
-            <div class="mb-6 animate-fade-in-up">
-                <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
-                <div class="bg-brand-surface shadow-card-sm border border-brand-border rounded-2xl overflow-hidden">
-                    ${items.map(t => this.renderTransactionItem(t)).join('')}
-                </div>
+        this.dom.list.innerHTML = `
+            <!-- MOBILE VIEW (CARDS) -->
+            <div class="md:hidden space-y-6">
+                ${Object.entries(grouped).map(([date, items]) => `
+                    <div class="animate-fade-in-up">
+                        <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
+                        <div class="bg-brand-surface shadow-card-sm border border-brand-border rounded-2xl overflow-hidden">
+                            ${items.map(t => this.renderTransactionItem(t)).join('')}
+                        </div>
+                    </div>
+                `).join('')}
             </div>
-        `).join('');
+
+            <!-- DESKTOP VIEW (TABLE) -->
+            <div class="hidden md:block bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-sm animate-fade-in">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-brand-border bg-brand-surface-light/50">
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Data</th>
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Categoria / Descrição</th>
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Conta</th>
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Status</th>
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right">Valor</th>
+                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-brand-border">
+                        ${transactions.map(t => {
+            const isExpense = t.type === 'expense';
+            const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
+            const sign = isExpense ? '-' : '+';
+            // Date formatting
+            const dateObj = new Date(t.date);
+            const day = dateObj.getDate().toString().padStart(2, '0');
+            const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+            const year = dateObj.getFullYear();
+
+            // Category Icon
+            const categoryColor = t.categories?.color || '#6c757d';
+            const categoryIcon = t.categories?.icon || 'fa-tag';
+            const iconDisplay = categoryIcon.includes('fa-') ? `<i class="fas ${categoryIcon}"></i>` : categoryIcon;
+
+            return `
+                                <tr class="hover:bg-brand-surface-light/50 transition duration-150 group">
+                                    <td class="p-4 text-sm text-brand-text-secondary font-medium whitespace-nowrap">
+                                        ${day}/${month}/${year}
+                                    </td>
+                                    <td class="p-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-lg" style="background-color: ${categoryColor}20; color: ${categoryColor};">
+                                                ${iconDisplay}
+                                            </div>
+                                            <div>
+                                                <p class="text-sm font-bold text-brand-text-primary text-ellipsis overflow-hidden">${t.description}</p>
+                                                <p class="text-xs text-brand-text-secondary">${t.categories?.name || 'Geral'}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="p-4">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs font-bold px-2 py-1 rounded bg-brand-bg border border-brand-border text-brand-text-secondary">
+                                                ${t.accounts?.name || 'Conta'}
+                                            </span>
+                                            ${t.context === 'business' ? '<span class="text-[9px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded border border-purple-500/20 font-bold">PJ</span>' : ''}
+                                        </div>
+                                    </td>
+                                    <td class="p-4">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.status === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}">
+                                            ${t.status === 'paid' ? 'Pago' : 'Pendente'}
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <span class="text-sm font-bold ${colorClass} value-sensitive tabular-nums">
+                                            ${sign} ${this.formatCurrency(t.amount / 100)}
+                                        </span>
+                                    </td>
+                                    <td class="p-4 text-right">
+                                        <div class="flex items-center justify-end gap-2 opacity-100 group-hover:opacity-100 transition-opacity">
+                                            <button onclick="window.app.WalletModule.openEdit('${t.id}')" class="p-2 text-brand-text-secondary hover:text-brand-text-primary hover:bg-brand-bg rounded-lg transition" title="Editar">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                            </button>
+                                            <button onclick="window.app.WalletModule.askDelete('${t.id}')" class="p-2 text-brand-text-secondary hover:text-red-500 hover:bg-red-50/10 rounded-lg transition" title="Excluir">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
     },
 
     updateBalanceDisplay() {
@@ -705,7 +824,8 @@ export const WalletModule = {
     async handleTransactionSubmit(e) {
         e.preventDefault();
 
-        const submitBtn = this.dom.form.querySelector('button[type="submit"]');
+        // Fix: Button is outside the form in the fixed footer, so we search in the modal
+        const submitBtn = this.dom.modal.querySelector('button[type="submit"]');
         const originalText = submitBtn.innerHTML;
 
         // UX: Previne clique duplo
@@ -749,10 +869,23 @@ export const WalletModule = {
 
                     await TransactionService.createRecurring({
                         ...transactionData,
-                        day_of_month: day,
-                        context: 'personal' // Defaulting
+                        day_of_month: day
                     });
                     Toast.show('Recorrência criada com sucesso!', 'success');
+                    HapticService.success();
+                } else if (document.getElementById('isInstallmentInput').checked) {
+                    // HANDLE INSTALLMENTS
+                    const installmentsCount = parseInt(formData.get('installmentsCount'));
+                    const installmentDay = formData.get('installmentDay') ? parseInt(formData.get('installmentDay')) : null;
+
+                    if (!installmentsCount || installmentsCount < 2) throw new Error('Número de parcelas inválido.');
+
+                    await TransactionService.createInstallments({
+                        ...transactionData,
+                        installmentsCount,
+                        installmentDay
+                    });
+                    Toast.show('Parcelamento criado!', 'success');
                     HapticService.success();
                 } else {
                     // NORMAL CREATE
@@ -993,6 +1126,8 @@ export const WalletModule = {
 
         // Save current selection to restore if valid
         const currentVal = this.dom.categorySelect.value;
+        const currentTxCategoryId = this.dom.form.dataset.id ? this.dom.form.querySelector('[name="categoryId"]')?.value : null;
+        // Note: dom.categorySelect.value might be empty if init. We rely on internal restore logic or currentVal if already selected.
 
         this.dom.categorySelect.innerHTML = '<option value="" disabled selected>Selecione...</option>';
 
@@ -1005,21 +1140,136 @@ export const WalletModule = {
             );
         }
 
-        // Agrupar por tipo (Receita/Despesa) pode ser uma melhoria visual
+        // --- CUSTOM REQUIREMENT: Enforce specific Expense Categories ---
+        if (filterType === 'expense') {
+            const contextSelect = this.dom.form.querySelector('select[name="context"]');
+            // Default to 'personal' if context select not found or empty (e.g. init time)
+            const context = contextSelect ? contextSelect.value : 'personal';
+
+            let REQUIRED_CATEGORIES = [];
+
+            if (context === 'business') {
+                REQUIRED_CATEGORIES = [
+                    'Equipe e Terceirizados',
+                    'Insumos e Materiais',
+                    'Lucro e Reservas',
+                    'Custos Operacionais',
+                    'Impostos e Taxas'
+                ];
+            } else {
+                // Default / Personal
+                REQUIRED_CATEGORIES = [
+                    'Custos Fixos',
+                    'Liberdade Financeira',
+                    'Metas',
+                    'Conforto',
+                    'Prazeres',
+                    'Conhecimento'
+                ];
+            }
+
+            // Filter to only show these specific categories
+            // We match by Name (Case Insensitive)
+            let filtered = categoriesToRender.filter(cat =>
+                REQUIRED_CATEGORIES.some(req => req.toLowerCase() === cat.name.toLowerCase())
+            );
+
+            // Important: sort them in the specific order requested
+            filtered.sort((a, b) => {
+                const indexA = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === a.name.toLowerCase());
+                const indexB = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === b.name.toLowerCase());
+                return indexA - indexB;
+            });
+
+            categoriesToRender = filtered;
+        }
+
+        // Render Options
         categoriesToRender.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.id;
-            // Emoji ou nada se for class icon - verificação de null/undefined
-            const icon = (cat.icon && cat.icon.includes('fa-')) ? '' : (cat.icon || '');
-            option.text = `${icon} ${cat.name} `;
+
+            // Map standard icon names to Emojis for the Select dropdown (since it can't render SVGs)
+            let emoji = '';
+            const iconName = cat.icon ? cat.icon.toLowerCase() : '';
+
+            const emojiMap = {
+                'lock': '🔒',
+                'trending-up': '📈',
+                'target': '🎯',
+                'coffee': '☕',
+                'smile': '😃',
+                'book': '📚',
+                'home': '🏠',
+                'car': '🚗',
+                'gamepad': '🎮',
+                'activity': '⚕️',
+                'dollar-sign': '💰',
+                'shopping-cart': '🛒',
+                'gift': '🎁',
+                'tool': '🛠️',
+                'briefcase': '💼',
+                'users': '👥',
+                'box': '📦',
+                'pie-chart': '📊',
+                'settings': '⚙️',
+                'file-text': '📄'
+            };
+
+            if (emojiMap[iconName]) {
+                emoji = emojiMap[iconName];
+            } else if (cat.icon && !cat.icon.includes('fa-') && !cat.icon.match(/^[a-z-]+$/)) {
+                // If it's already an emoji (not a class-like string)
+                emoji = cat.icon;
+            }
+
+            option.text = emoji ? `${emoji} ${cat.name}` : cat.name;
             this.dom.categorySelect.appendChild(option);
         });
 
         // Restore selection if it still exists in the filtered list
         if (currentVal && categoriesToRender.some(c => c.id == currentVal)) {
             this.dom.categorySelect.value = currentVal;
+        } else if (currentVal) {
+            // If the current value was filtered out (because it's not in the Required List),
+            // we should probably fetch it from full list and append it so it's valid?
+            const missingCat = this.state.categories.find(c => c.id == currentVal);
+            if (missingCat) {
+                const option = document.createElement('option');
+                option.value = missingCat.id;
+                const icon = (missingCat.icon && missingCat.icon.includes('fa-')) ? '' : (missingCat.icon || '');
+                option.text = `${icon} ${missingCat.name} (Antigo)`;
+                this.dom.categorySelect.appendChild(option);
+                this.dom.categorySelect.value = currentVal;
+            } else {
+                this.dom.categorySelect.value = "";
+            }
         } else {
-            this.dom.categorySelect.value = ""; // Reset if invalid
+            this.dom.categorySelect.value = "";
+        }
+
+        // --- NEW: Add Manage Button Logic ---
+        // We can't put a button INSIDE the select. But we can ensure the container has it.
+        // We'll verify if the 'manage-cats-btn' exists next to the select. If not, create it.
+        const parent = this.dom.categorySelect.parentElement;
+        if (parent && !parent.querySelector('#manage-cats-btn')) {
+            const btn = document.createElement('button');
+            btn.id = 'manage-cats-btn';
+            btn.type = 'button'; // Prevent form submit
+            btn.className = 'text-xs text-brand-gold font-bold uppercase mt-2 hover:underline flex items-center gap-1';
+            btn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                Gerenciar Categorias
+            `;
+            btn.onclick = () => {
+                // Close modal and go to settings? Or open settings modal?
+                // Ideally preserve state? For now, navigate.
+                if (confirm('Deseja ir para Configurações gerenciar as categorias? Os dados não salvos desta transação serão perdidos.')) {
+                    window.app.WalletModule.closeTransactionModal();
+                    window.app.navigateTo('settings');
+                }
+            };
+            parent.appendChild(btn);
         }
     },
 
@@ -1215,7 +1465,7 @@ export const WalletModule = {
                                             ${isDueSoon ? `<span class="text-yellow-300 ml-1">(em ${daysUntilDue} dias)</span>` : ''}
                                         </p>
                                         ${card.credit_limit ? `
-                                            <p class="text-purple-200 text-xs">Limite: ${limitUsed}% usado</p>
+                                            <p class="text-purple-200 text-xs">Pendentes: <span class="text-white font-bold">R$ ${invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
                                         ` : ''}
                                     </div>
 
@@ -1503,7 +1753,7 @@ window.app.openCreditCardModal = () => {
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Limite (Opcional)</label>
-                    <input type="number" step="0.01" name="credit_limit" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: 5000.00">
+                    <input type="text" name="credit_limit" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="R$ 0,00">
                 </div>
                 <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-4 rounded-xl mt-4">
                     Salvar Cartão
@@ -1522,7 +1772,7 @@ window.app.openCreditCardModal = () => {
                 bank: form.bank.value,
                 last_digits: form.last_digits.value,
                 billing_day: form.billing_day.value,
-                credit_limit: form.credit_limit.value
+                credit_limit: form.credit_limit.value ? CurrencyMask.unmask(form.credit_limit.value) : null
             });
             Toast.show('Cartão adicionado com sucesso!', 'success');
             modal.remove();
@@ -1550,7 +1800,7 @@ window.app.openAddPurchaseModal = (cardId) => {
                 <input type="hidden" name="card_id" value="${cardId}">
                 <div>
                     <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
-                    <input type="number" step="0.01" name="amount" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-2xl font-bold text-white" placeholder="0,00">
+                    <input type="text" name="amount" data-currency="true" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-2xl font-bold text-white" placeholder="R$ 0,00">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Descrição</label>
@@ -1579,7 +1829,7 @@ window.app.openAddPurchaseModal = (cardId) => {
         const form = e.target;
         try {
             await CreditCardService.addPurchase(form.card_id.value, {
-                amount: form.amount.value,
+                amount: CurrencyMask.unmask(form.amount.value),
                 description: form.description.value,
                 purchase_date: form.purchase_date.value,
                 installments: form.installments.value

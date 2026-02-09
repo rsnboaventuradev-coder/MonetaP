@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Modal Layout</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes slide-up {
+            from {
+                transform: translateY(100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes scale-in {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -40%) scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .animate-slide-up {
+            animation: slide-up 0.3s ease-out forwards;
+        }
+
+        .animate-scale-in {
+            animation: scale-in 0.2s ease-out forwards;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 p-8">
+    <h1 class="text-white text-2xl mb-4">Teste do Modal "Nova Meta"</h1>
+    <button onclick="openModal()" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600">
+        Abrir Modal
+    </button>
+
+    <!-- Modal -->
+    <div id="add-goal-modal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300"
+            onclick="closeModal()"></div>
+
+        <div
+            class="absolute bottom-0 w-full left-0 right-0 md:relative md:bottom-auto md:left-auto md:right-auto md:w-full md:max-w-2xl md:min-w-[600px] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 rounded-t-[2rem] md:rounded-2xl md:border shadow-2xl flex flex-col max-h-[90vh] md:max-h-[80vh] animate-slide-up md:animate-scale-in md:fixed md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2">
+            <div class="w-12 h-1 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mt-4 mb-2 shrink-0 md:hidden"></div>
+
+            <!-- Header -->
+            <div
+                class="p-6 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-t-2xl shrink-0">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Nova Meta</h3>
+                    <p class="text-xs text-gray-600 dark:text-gray-400">Defina seu próximo objetivo financeiro</p>
+                </div>
+                <button onclick="closeModal()"
+                    class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div class="overflow-y-auto flex-1 p-6 space-y-4 custom-scrollbar min-h-0">
+                <form id="add-goal-form" class="space-y-4">
+
+                    <!-- Goal Type Selection -->
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-widest mb-3">Qual
+                            é o foco desta meta?</label>
+                        <div class="grid grid-cols-2 gap-3 mt-3">
+                            <label class="cursor-pointer relative">
+                                <input type="radio" name="type" value="security" class="peer sr-only">
+                                <div
+                                    class="p-4 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-blue-500/50 peer-checked:bg-green-500/10 peer-checked:border-green-500 peer-checked:text-green-500 transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
+                                    <span class="text-2xl">🛡️</span>
+                                    <span
+                                        class="text-xs font-bold text-gray-600 dark:text-gray-400 peer-checked:text-green-500">Segurança</span>
+                                </div>
+                            </label>
+                            <label class="cursor-pointer relative">
+                                <input type="radio" name="type" value="lifestyle" class="peer sr-only" checked>
+                                <div
+                                    class="p-4 rounded-xl bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-blue-500/50 peer-checked:border-pink-500 peer-checked:bg-pink-500/10 peer-checked:text-pink-500 transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
+                                    <span class="text-2xl">🌴</span>
+                                    <span
+                                        class="text-xs font-bold text-gray-600 dark:text-gray-400 peer-checked:text-pink-500">Estilo
+                                        de Vida</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Name Field -->
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Nome
+                            da Meta</label>
+                        <input type="text" name="title" required
+                            class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-gray-400 text-lg font-medium"
+                            placeholder="Ex: Viagem para Paris">
+                    </div>
+
+                    <!-- Values Section -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Valor
+                                Alvo</label>
+                            <input type="text" name="target_amount" required
+                                class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-gray-400 font-bold"
+                                placeholder="R$ 0,00">
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Já
+                                Guardado</label>
+                            <input type="text" name="current_amount"
+                                class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-gray-400 font-bold"
+                                placeholder="R$ 0,00">
+                        </div>
+                    </div>
+
+                    <!-- Priority & Date -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Prioridade</label>
+                            <select name="priority"
+                                class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition appearance-none cursor-pointer">
+                                <option value="high">🔥 Alta</option>
+                                <option value="medium" selected>⚡ Média</option>
+                                <option value="low">🧊 Baixa</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Prazo
+                                (Opcional)</label>
+                            <input type="date" name="deadline"
+                                class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition">
+                        </div>
+                    </div>
+
+                    <!-- Extra fields to test scroll -->
+                    <div>
+                        <label
+                            class="block text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2 ml-1">Descrição</label>
+                        <textarea name="description" rows="3"
+                            class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-4 text-gray-900 dark:text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-gray-400"
+                            placeholder="Descreva sua meta..."></textarea>
+                    </div>
+
+                    <div class="h-4"></div>
+                </form>
+            </div>
+
+            <!-- Sticky Footer -->
+            <div
+                class="p-6 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 rounded-b-2xl shrink-0 z-10">
+                <button type="submit" form="add-goal-form"
+                    class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl shadow-sm hover:shadow-md active:scale-[0.98] transition flex items-center justify-center gap-2 text-lg">
+                    <span>Criar Meta</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('add-goal-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('add-goal-modal').classList.add('hidden');
+        }
+
+        document.getElementById('add-goal-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Formulário submetido! (teste)');
+            closeModal();
+        });
+    </script>
+</body>
+
+</html>

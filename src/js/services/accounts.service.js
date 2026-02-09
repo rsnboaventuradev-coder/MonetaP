@@ -44,7 +44,7 @@ export const AccountsService = {
             .insert({
                 ...accountData,
                 user_id: user.id,
-                current_balance: MoneyHelper.toCents(accountData.initial_balance)
+                current_balance: accountData.initial_balance // Already in cents from CurrencyMask.unmask()
             })
             .select()
             .single();
@@ -60,12 +60,12 @@ export const AccountsService = {
     async update(id, updates) {
         const dbUpdates = { ...updates };
 
-        // Convert monetary values to Cents if present
+        // Values are already in cents from CurrencyMask.unmask()
         if (updates.current_balance !== undefined) {
-            dbUpdates.current_balance = MoneyHelper.toCents(updates.current_balance);
+            dbUpdates.current_balance = updates.current_balance;
         }
         if (updates.initial_balance !== undefined) {
-            dbUpdates.initial_balance = MoneyHelper.toCents(updates.initial_balance);
+            dbUpdates.initial_balance = updates.initial_balance;
         }
 
         const { data, error } = await supabase

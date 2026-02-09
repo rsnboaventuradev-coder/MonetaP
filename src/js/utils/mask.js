@@ -74,7 +74,7 @@ export const CurrencyMask = {
 
     /**
      * Remove formatting and return value in cents (integer)
-     * @param {string} value - Formatted currency string
+     * @param {string} value - Formatted currency string (e.g., "R$ 0,01" or "R$ 100,00")
      * @returns {number} Value in cents
      */
     unmask(value) {
@@ -83,14 +83,13 @@ export const CurrencyMask = {
         // Remove everything except digits and comma
         const cleanValue = value.replace(/[^\d,]/g, '');
 
-        // Replace comma with dot for parsing
-        const numericString = cleanValue.replace(',', '.');
+        // Split by comma to get reais and centavos
+        const parts = cleanValue.split(',');
+        const reais = parseInt(parts[0] || '0', 10);
+        const centavos = parseInt((parts[1] || '00').padEnd(2, '0').substring(0, 2), 10);
 
-        // Parse as float and convert to cents
-        const floatValue = parseFloat(numericString) || 0;
-
-        // Return in cents (integer)
-        return Math.round(floatValue * 100);
+        // Return total in cents
+        return (reais * 100) + centavos;
     },
 
     /**

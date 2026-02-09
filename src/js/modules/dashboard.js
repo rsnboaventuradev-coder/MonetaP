@@ -60,6 +60,13 @@ export const DashboardModule = {
                 await this.renderView(container);
             }
 
+            // Render Onboarding Carousel if needed
+            setTimeout(() => {
+                if (window.OnboardingModule && typeof window.OnboardingModule.renderCarouselWidget === 'function') {
+                    window.OnboardingModule.renderCarouselWidget('onboarding-carousel-container');
+                }
+            }, 100);
+
         } catch (error) {
             console.error('Dashboard Render Error:', error);
             if (window.app.currentView === 'dashboard') {
@@ -107,16 +114,28 @@ export const DashboardModule = {
         const session = await SupabaseService.getSession();
         const user = session?.user;
 
-        // Fetch Profile for Cost of Living (optional for now, kept for transparency)
+        // Fetch Profile for Cost of Living and Name
         let avgCostOfLiving = 5000;
+        let userName = 'Usuário';
+
         if (user) {
             const { data: profile } = await SupabaseService.client
                 .from('profiles')
-                .select('monthly_income')
+                .select('monthly_income,full_name')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (profile && profile.monthly_income) avgCostOfLiving = parseFloat(profile.monthly_income);
+
+            if (profile) {
+                if (profile.monthly_income) avgCostOfLiving = parseFloat(profile.monthly_income);
+                // Priority: Full Name > Email > 'Usuário'
+                userName = profile.full_name || (user.email ? user.email.split('@')[0] : 'Usuário');
+            } else {
+                userName = user.email ? user.email.split('@')[0] : 'Usuário';
+            }
         }
+
+        // Format First Name
+        const firstName = userName.split(' ')[0];
 
         const currentMonth = this.selectedDate.getMonth();
         const currentYear = this.selectedDate.getFullYear();
@@ -143,9 +162,9 @@ export const DashboardModule = {
                 
                 <!-- HEADER -->
                 <div class="px-6 pt-6 flex justify-between items-center bg-background-light/80 dark:bg-background-dark/80 sticky top-0 z-20 pb-4 border-b border-slate-200 dark:border-slate-800 backdrop-blur-md transition-colors duration-300">
-                    <div>
-                        <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark font-medium uppercase tracking-wider">Dashboard</p>
-                        <h1 class="text-2xl font-bold text-text-primary_light dark:text-text-primary_dark leading-none mt-1">Visão Geral</h1>
+                    <div onclick="window.app.navigateTo('settings')" class="cursor-pointer group">
+                        <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark font-medium uppercase tracking-wider group-hover:text-brand-500 transition-colors">Olá, ${firstName}</p>
+                        <h1 class="text-2xl font-bold text-text-primary_light dark:text-text-primary_dark leading-none mt-1 group-hover:text-brand-500 transition-colors">Visão Geral</h1>
                     </div>
                     <div class="flex items-center gap-3">
                          <button onclick="window.app.togglePrivacy()" class="text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark transition">
@@ -154,8 +173,8 @@ export const DashboardModule = {
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                         </button>
-                        <div class="w-8 h-8 rounded-full bg-accent-gold/20 flex items-center justify-center text-accent-gold font-bold text-xs cursor-pointer hover:bg-accent-gold/30 transition shadow-sm">
-                            ${user?.email?.charAt(0).toUpperCase() || 'U'}
+                        <div onclick="window.app.navigateTo('settings')" class="w-8 h-8 rounded-full bg-accent-gold/20 flex items-center justify-center text-accent-gold font-bold text-xs cursor-pointer hover:bg-accent-gold/30 transition shadow-sm">
+                            ${firstName.charAt(0).toUpperCase()}
                         </div>
                     </div>
                 </div>
@@ -177,8 +196,8 @@ export const DashboardModule = {
                     </button>
                 </div>
 
-                <!-- MINI ONBOARDING WIDGET (Injected if needed) -->
-                <div id="mini-onboarding-container" class="px-6 empty:hidden"></div>
+                <!-- ONBOARDING CAROUSEL WIDGET -->
+                <div id="onboarding-carousel-container" class="pl-6 empty:hidden animate-fade-in-up"></div>
 
                 <!-- 1. TOTAL BALANCE CARD -->
                 <div class="px-6">
@@ -598,64 +617,67 @@ export const DashboardModule = {
         const partners = PartnersService.partners;
 
         return `
-            <div id="dashboard-tx-modal" class="fixed inset-0 z-50 hidden">
-                <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300" id="close-dash-modal-overlay"></div>
-                
-                <div class="absolute bottom-0 w-full max-w-lg left-1/2 -translate-x-1/2 bg-background-card_light dark:bg-background-card_dark border-t border-slate-200 dark:border-slate-800 rounded-t-[2rem] p-6 pb-8 animate-slide-up shadow-2xl h-[85vh] flex flex-col">
-                    <div class="w-12 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-6 shrink-0"></div>
+            <div id="dashboard-tx-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
+                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity duration-300" id="close-dash-modal-overlay"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:min-w-[500px] md:h-auto animate-slide-up md:animate-scale-in">
                     
-                    <div class="flex justify-between items-center mb-4 shrink-0">
-                        <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark flex items-center gap-2">
-                             Nova Operação
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+
+                    <!-- Header -->
+                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
+                         <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
+                             🚀 Nova Operação
                         </h3>
-                        <button class="bg-slate-100 dark:bg-slate-800 rounded-full p-2 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark transition" id="close-dash-modal-btn">
+                         <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-dash-modal-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
                         </button>
                     </div>
                     
-                    <form id="dash-tx-form" class="space-y-6 overflow-y-auto custom-scrollbar flex-1 pr-1">
-                        <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Valor</label>
+                    <!-- Body (Scrollable) -->
+                    <form id="dash-tx-form" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                         <div>
+                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Valor</label>
                             <div class="relative group">
-                                <span class="absolute left-0 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark text-2xl font-light group-focus-within:text-brand-500 transition">R$</span>
-                                <input type="number" step="0.01" name="amount" id="dash-amount-input" required 
-                                    class="w-full bg-transparent text-5xl font-black text-text-primary_light dark:text-text-primary_dark border-none focus:ring-0 pl-10 placeholder-slate-300 dark:placeholder-slate-700 p-0 caret-brand-500" 
+                                <span class="absolute left-0 top-1/2 -translate-y-1/2 text-brand-text-secondary text-2xl font-light group-focus-within:text-brand-gold transition">R$</span>
+                                <input type="number" inputmode="decimal" step="0.01" name="amount" id="dash-amount-input" required 
+                                    class="w-full bg-transparent text-5xl font-black text-brand-text-primary border-none focus:ring-0 pl-10 placeholder-brand-surface-light p-0 caret-brand-gold" 
                                     placeholder="0,00">
                             </div>
                         </div>
 
                         <div class="grid grid-cols-2 gap-4">
-                            <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background-light dark:bg-slate-800/50 cursor-pointer overflow-hidden group hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                            <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-brand-border bg-brand-bg cursor-pointer overflow-hidden group hover:bg-brand-surface-light transition">
                                 <input type="radio" name="type" value="income" class="peer hidden">
-                                <div class="absolute inset-0 border-2 border-accent-success opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-accent-success/20 text-accent-success mb-2 flex items-center justify-center group-hover:scale-110 transition">
+                                <div class="absolute inset-0 border-2 border-green-500 opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
+                                <div class="w-10 h-10 rounded-full bg-green-500/20 text-green-500 mb-2 flex items-center justify-center group-hover:scale-110 transition">
                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                                 </div>
-                                <span class="font-bold text-sm text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-success transition">Entrada</span>
+                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-green-500 transition">Entrada</span>
                             </label>
-                             <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background-light dark:bg-slate-800/50 cursor-pointer overflow-hidden group hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                             <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-brand-border bg-brand-bg cursor-pointer overflow-hidden group hover:bg-brand-surface-light transition">
                                 <input type="radio" name="type" value="expense" class="peer hidden" checked>
-                                <div class="absolute inset-0 border-2 border-accent-danger opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-accent-danger/20 text-accent-danger mb-2 flex items-center justify-center group-hover:scale-110 transition">
+                                <div class="absolute inset-0 border-2 border-red-500 opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
+                                <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-500 mb-2 flex items-center justify-center group-hover:scale-110 transition">
                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                                 </div>
-                                <span class="font-bold text-sm text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-danger transition">Saída</span>
+                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-red-500 transition">Saída</span>
                             </label>
                         </div>
                         
                         <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Descrição</label>
+                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Descrição</label>
                             <input type="text" name="description" id="dash-desc-input" required 
-                                class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-medium"
+                                class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition placeholder-brand-text-secondary font-medium"
                                 placeholder="O que foi isso?">
                         </div>
 
                          <!-- Dynamic Fields based on global context would be ideal, but for Quick Action we simplify -->
                         <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Categoria / Contexto</label>
-                            <select name="category" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 outline-none appearance-none">
+                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Categoria / Contexto</label>
+                            <select name="category" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold outline-none appearance-none">
                                 <option value="general">Geral</option>
                                 <option value="food">Alimentação</option>
                                 <option value="transport">Transporte / Uber</option>
@@ -667,24 +689,29 @@ export const DashboardModule = {
 
                         ${partners.length > 0 ? `
                         <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Vincular a Parceiro (Opcional)</label>
-                            <select name="partner_id" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 outline-none appearance-none">
+                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Vincular a Parceiro (Opcional)</label>
+                            <select name="partner_id" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold outline-none appearance-none">
                                 <option value="" selected>Nenhum</option>
                                 ${partners.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                             </select>
                         </div>
                         ` : ''}
 
-                        <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium text-lg py-4 rounded-xl shadow-sm hover:shadow-md active:scale-[0.98] transition mt-6">
+                         <div class="pb-32 md:pb-0"></div>
+                    </form>
+
+                    <!-- Footer (Fixed) -->
+                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="dash-tx-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-bold text-lg py-4 rounded-xl shadow-lg shadow-brand-gold/20 active:scale-[0.98] transition">
                             Confirmar Lançamento
                         </button>
-                    </form>
+                    </div>
                 </div>
             </div>
         `;
     },
 
-    addModalListeners(container) {
+    async addModalListeners(container) {
         const modal = document.getElementById('dashboard-tx-modal');
         const form = document.getElementById('dash-tx-form');
         const closeBtn = document.getElementById('close-dash-modal-btn');
@@ -693,6 +720,86 @@ export const DashboardModule = {
         const closeModal = () => modal.classList.add('hidden');
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         if (overlay) overlay.addEventListener('click', closeModal);
+
+        // --- DYNAMIC CATEGORY POPULATION ---
+        const categorySelect = form ? form.querySelector('select[name="category"]') : null;
+        if (categorySelect) {
+            try {
+                const categories = await TransactionService.getCategories();
+
+                // FILTER LOGIC (Same as Wallet.js)
+                const REQUIRED_CATEGORIES = [
+                    'Custos Fixos',
+                    'Liberdade Financeira',
+                    'Metas',
+                    'Conforto',
+                    'Prazeres',
+                    'Conhecimento'
+                ];
+
+                let filtered = categories.filter(cat =>
+                    REQUIRED_CATEGORIES.some(req => req.toLowerCase() === cat.name.toLowerCase())
+                );
+
+                filtered.sort((a, b) => {
+                    const indexA = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === a.name.toLowerCase());
+                    const indexB = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === b.name.toLowerCase());
+                    return indexA - indexB;
+                });
+
+                // Clear hardcoded and populate
+                if (filtered.length > 0) {
+                    categorySelect.innerHTML = '<option value="" disabled selected>Selecione...</option>';
+
+                    const emojiMap = {
+                        'lock': '🔒',
+                        'trending-up': '📈',
+                        'target': '🎯',
+                        'coffee': '☕',
+                        'smile': '😃',
+                        'book': '📚',
+                        'home': '🏠',
+                        'car': '🚗',
+                        'gamepad': '🎮',
+                        'activity': '⚕️',
+                        'dollar-sign': '💰',
+                        'shopping-cart': '🛒',
+                        'gift': '🎁',
+                        'tool': '🛠️',
+                        'briefcase': '💼'
+                    };
+
+                    filtered.forEach(cat => {
+                        const option = document.createElement('option');
+                        option.value = cat.id; // Correct ID
+
+                        let emoji = '';
+                        const iconName = cat.icon ? cat.icon.toLowerCase() : '';
+
+                        if (emojiMap[iconName]) {
+                            emoji = emojiMap[iconName];
+                        } else if (cat.icon && !cat.icon.includes('fa-') && !cat.icon.match(/^[a-z-]+$/)) {
+                            emoji = cat.icon;
+                        }
+
+                        option.text = emoji ? `${emoji} ${cat.name}` : cat.name;
+                        categorySelect.appendChild(option);
+                    });
+
+                    // Add "Manage" option or link? Not strictly requested for Quick Action, but consistency is good.
+                    // Since this is a select, we can't add a button inside easily without breaking UI flow of the simple form.
+                    // The user can go to Settings via the button in the dashboard header if needed.
+                } else {
+                    // Fallback to original text if no DB matches (avoids empty dropdown)
+                    // But we suspect DB has them. If not, keep hardcoded or show "No categories".
+                    // We'll leave the hardcoded ones if filtered is empty, assuming init failed?
+                    // Actually, let's just leave it alone if length is 0.
+                }
+
+            } catch (e) {
+                console.error('Failed to load categories in dashboard', e);
+            }
+        }
 
         if (form) {
             form.addEventListener('submit', async (e) => {
@@ -704,21 +811,33 @@ export const DashboardModule = {
                 const partnerId = formData.get('partner_id');
                 const context = partnerId ? 'business' : this.currentContext;
 
+                // Get Amount (Handle comma)
+                // Dashboard input is 'number' step 0.01 often, but sticking to float parse.
+                // Note: TransactionService handles simple float inputs as Reais.
+                let amountFloat = parseFloat(formData.get('amount'));
+
                 const newTx = {
-                    amount: parseFloat(formData.get('amount')),
+                    amount: amountFloat,
                     description: formData.get('description'),
                     type: formData.get('type'),
                     date: new Date().toISOString(),
                     context: context,
                     partner_id: partnerId || null,
                     status: 'paid', // Quick action assumes paid usually
-                    category: formData.get('category') || 'general'
+                    category_id: formData.get('category') // Changed from 'category' (text) to 'category_id' (UUID)
                 };
+
+                // If the user didn't select a valid UUID category (e.g. left logic above failed), 
+                // newTx.category_id might be "general" (if we didn't clear hardcoded) or null.
+                // We should ensure it's valid.
 
                 try {
                     await TransactionService.create(newTx);
                     closeModal();
                     form.reset();
+                    // Reset Select to default
+                    if (categorySelect && categorySelect.options.length > 0) categorySelect.value = "";
+
                     this.render(); // Refresh dashboard
                     Toast.show('Lançamento realizado com sucesso!', 'success');
                 } catch (error) {

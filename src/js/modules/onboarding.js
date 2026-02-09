@@ -1,7 +1,10 @@
 import { supabase } from '../services/supabase.service.js';
 import { GoalsService } from '../services/goals.service.js';
 import { SettingsService } from '../services/settings.service.js';
+
 import { Toast } from '../utils/toast.js';
+import { AccountsService } from '../services/accounts.service.js';
+import { CurrencyMask } from '../utils/mask.js';
 
 export const OnboardingModule = {
     data: {
@@ -45,164 +48,196 @@ export const OnboardingModule = {
             }
 
             this.updateStatusMap();
-            this.renderDashboard();
+            // this.renderDashboard(); // Blocking overlay removed in favor of Carousel Widget
         } else {
             console.log('Onboarding: Completed previously.');
         }
     },
 
     updateStatusMap() {
+        // Sync with real data from Services if available
+        const hasAccounts = AccountsService?.accounts?.length > 0;
+        // const hasGoals = GoalsService?.goals?.length > 0; // If GoalsService is available
+
         const p = this.data.onboarding_progress;
 
         // Reset defaults
-        this.status = { identity: 'locked', snapshot: 'locked', refinement: 'locked', investments: 'locked' };
+        this.status = { identity: 'active', snapshot: 'locked', refinement: 'locked', investments: 'locked', credit_cards: 'locked', accounts: 'active' };
 
-        if (p === 'identity') {
-            this.status.identity = 'active';
-            this.status.snapshot = 'locked';
-            this.status.refinement = 'locked';
-        } else if (p === 'snapshot') {
-            this.status.identity = 'completed';
-            this.status.snapshot = 'active';
-            this.status.refinement = 'locked';
-        } else if (p === 'completed') {
-            this.status.identity = 'completed';
-            this.status.snapshot = 'completed';
+        // 1. Accounts
+        if (hasAccounts || this.data.step_accounts_completed) {
+            this.status.accounts = 'completed';
+            this.status.identity = 'active'; // Unlock next
+        } else {
+            this.status.accounts = 'active';
+        }
 
-            // Refinement is active until completed
-            if (this.data.step_accounts_completed) {
-                this.status.refinement = 'completed';
+        // 2. Identity
+        if (this.status.accounts === 'completed') {
+            if (p === 'snapshot' || p === 'completed' || this.data.onboarding_completed) {
+                this.status.identity = 'completed';
+                this.status.snapshot = 'active';
             } else {
-                this.status.refinement = 'active';
+                this.status.identity = 'active';
             }
+        }
 
-            // Check Investments Logic
-            const target = (this.data.cost_of_living || 0) * 6;
-            const balance = this.data.current_balance || 0;
-
-            if (balance >= target && target > 0) {
-                this.status.investments = 'active'; // Gold
+        // 3. Snapshot / Goals
+        if (this.status.identity === 'completed') {
+            if (p === 'completed' || this.data.onboarding_completed) {
+                this.status.snapshot = 'completed'; // Goals/Snapshot done
+                this.status.credit_cards = 'active';
             } else {
-                this.status.investments = 'safety_mode'; // Blue/Info
+                this.status.snapshot = 'active';
             }
+        }
+
+        // 4. Credit Cards
+        if (this.status.snapshot === 'completed') {
+            this.status.credit_cards = 'active';
         }
     },
 
-    renderDashboard() {
-        // Create or get overlay
-        let overlay = document.getElementById('onboarding-dashboard');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'onboarding-dashboard';
-            overlay.className = 'fixed inset-0 z-[100] bg-background-light dark:bg-background-dark flex flex-col pt-10 px-4 animate-fade-in overflow-y-auto';
-            document.body.appendChild(overlay);
-        }
 
-        overlay.innerHTML = `
-            <div class="max-w-7xl mx-auto w-full mb-10">
-                <header class="text-center mb-12">
-                     <div class="w-16 h-16 bg-accent-gold/10 rounded-full flex items-center justify-center text-3xl mx-auto mb-6 shadow-custom border border-accent-gold/20">🚀</div>
-                    <h1 class="text-4xl font-bold text-text-primary_light dark:text-text-primary_dark mb-4">Bem-vindo ao Moneta</h1>
-                    <p class="text-text-secondary_light dark:text-text-secondary_dark text-lg max-w-2xl mx-auto">
-                        Vamos configurar seu ambiente financeiro. Complete as missões abaixo para liberar seu dashboard.
-                    </p>
-                </header>
 
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
-                    <!-- Connector Lines (Visual Only, hidden on mobile) -->
-                    <div class="hidden md:block absolute top-1/2 left-0 w-full h-1 bg-slate-200 dark:bg-slate-700 -z-10 -translate-y-1/2 transform"></div>
 
-                    <!-- CARD 1: PERFIL -->
-                    ${this._renderCard('identity', 'Perfil', 'Defina se você usará o app para fins Pessoais ou Empresariais.', '👤')}
+    renderCarouselWidget(containerId) {
+        // Ensure status is up to date before render
+        this.updateStatusMap();
 
-                    <!-- CARD 2: RAIO-X -->
-                    ${this._renderCard('snapshot', 'Raio-X', 'Estimativa de finanças atuais para traçarmos metas.', '📊')}
+        const container = document.getElementById(containerId);
+        if (!container) return;
 
-                    <!-- CARD 3: REFINAMENTO -->
-                    ${this._renderCard('refinement', 'Refinamento', 'Ajustes finais para começar.', '✨')}
+        // Force display block to ensure visibility if it was hidden previously
+        container.style.display = 'block';
 
-                    <!-- CARD 4: INVESTIMENTOS -->
-                    ${this._renderCard('investments', 'Investimentos', 'Montagem de carteira baseada no seu momento.', '📈')}
-                </div>
+        // Check if everything is ABSOLUTELY done and user doesn't want to see it?
+        // For now, allow it to remain visible or maybe user can minimize it.
+        // We will keep it visible to check status marks.
+
+        container.innerHTML = `
+            <div class="mb-2 pr-6 flex justify-between items-end">
+                <h3 class="text-lg font-bold text-brand-text-primary">Próximos passos</h3>
+                <span class="text-xs text-brand-text-secondary mb-1">Passo ${this.getCompletedCount()} de 4</span>
             </div>
+            
+            <div class="flex overflow-x-auto gap-4 pb-6 pt-2 px-1 snap-x snap-mandatory hide-scrollbar">
+                <!-- CARD 1: SALDO (Contas) -->
+                ${this._renderCarouselCard('accounts', 'Informe seu saldo', 'Definir contas e reserva de emergência.', '💰', '1 de 4')}
 
-            <!-- ACTION AREA / MODAL CONTAINER -->
-            <div id="onb-action-area" class="max-w-4xl mx-auto w-full pb-20"></div>
+                <!-- CARD 2: RENDA -->
+                ${this._renderCarouselCard('identity', 'Registre sua renda', 'Adicione sua principal fonte de renda.', '💵', '2 de 4')}
+
+                <!-- CARD 3: GASTOS (Metas) -->
+                ${this._renderCarouselCard('snapshot', 'Adicione metas', 'Crie seus primeiros objetivos.', '📉', '3 de 4')}
+
+                <!-- CARD 4: CARTÕES (Faturas) -->
+                ${this._renderCarouselCard('credit_cards', 'Cadastre seus cartões', 'Gerencie faturas e pagamentos.', '💳', '4 de 4')}
+            </div>
         `;
 
         this.addCardListeners();
     },
 
+    getCompletedCount() {
+        let count = 0;
+        if (this.status.accounts === 'completed') count++;
+        if (this.status.identity === 'completed') count++;
+        if (this.status.snapshot === 'completed') count++; // Mapping snapshot to "Gastos Recorrentes" for simplicity or create new logic
+        if (this.status.credit_cards === 'completed') count++;
+        return count;
+    },
 
-
-    _renderCard(stepKey, title, desc, icon) {
-        const state = this.status[stepKey]; // locked, active, completed, safety_mode
-        const isLocked = state === 'locked';
+    _renderCarouselCard(stepKey, title, desc, icon, stepLabel) {
+        const state = this.status[stepKey] || 'locked';
         const isCompleted = state === 'completed';
         const isActive = state === 'active';
-        const isSafety = state === 'safety_mode';
 
-        let statusClasses = '';
-        let iconBg = '';
+        let cardBg = 'bg-brand-surface';
+        let borderClass = 'border-brand-border';
+        let opacity = '';
+        let buttonClass = 'bg-brand-bg text-brand-text-primary';
+        let btnIcon = 'chevron-right';
 
-        if (isLocked) {
-            statusClasses = 'opacity-50 grayscale cursor-not-allowed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800';
-            iconBg = 'bg-slate-200 dark:bg-slate-700 text-slate-400';
-        } else if (isActive) {
-            statusClasses = 'border-accent-gold shadow-lg shadow-accent-gold/10 hover:scale-105 cursor-pointer ring-1 ring-accent-gold/50 bg-background-card_light dark:bg-background-card_dark';
-            iconBg = 'bg-accent-gold text-white';
+        if (isActive) {
+            cardBg = 'bg-brand-surface ring-2 ring-brand-gold/20';
+            borderClass = 'border-brand-gold';
+            buttonClass = 'bg-brand-gold text-white shadow-glow-gold';
         } else if (isCompleted) {
-            statusClasses = 'border-accent-success bg-emerald-50 dark:bg-emerald-900/10 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/20';
-            iconBg = 'bg-accent-success text-white';
-        } else if (isSafety) {
-            statusClasses = 'border-blue-500 bg-blue-50 dark:bg-blue-900/10 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/20 hover:scale-105 shadow-lg shadow-blue-500/20';
-            iconBg = 'bg-blue-500 text-white';
+            opacity = 'opacity-80';
+            borderClass = 'border-green-500/30';
+            cardBg = 'bg-green-50/50 dark:bg-green-900/10';
+            buttonClass = 'bg-green-500 text-white';
+            btnIcon = 'check';
+        } else {
+            // Locked or future
+            opacity = 'opacity-60 grayscale-[0.5]';
         }
 
         return `
-            <div id="card-${stepKey}" class="border rounded-2xl p-6 transition-all duration-300 relative overflow-hidden group h-full ${statusClasses}">
-                <div class="flex flex-col items-center text-center space-y-4 relative z-10 h-full">
-                    <div class="w-14 h-14 rounded-2xl ${iconBg} flex items-center justify-center text-2xl shadow-md mb-2 transition-colors">
-                        ${isCompleted ? '✓' : icon}
+            <div id="card-${stepKey}" class="min-w-[260px] max-w-[260px] snap-center flex flex-col p-5 rounded-2xl border ${borderClass} ${cardBg} ${opacity} relative group transition-all duration-300 hover:scale-[1.02] cursor-pointer">
+                
+                 ${isActive ? `<div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-gold text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-wide">Atual</div>` : ''}
+
+                <div class="flex justify-between items-start mb-4">
+                    <div class="w-10 h-10 rounded-full bg-brand-surface-light flex items-center justify-center text-xl shadow-sm">
+                        ${icon}
                     </div>
-                    <h3 class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark">${title}</h3>
-                    <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark leading-relaxed">${desc}</p>
-                    
-                    <div class="mt-auto pt-4">
-                        ${isActive ? `<span class="inline-block px-3 py-1 bg-accent-gold/10 text-accent-gold text-[10px] font-bold rounded-full uppercase tracking-wider animate-pulse">Disponível</span>` : ''}
-                        ${isLocked ? `<span class="inline-block px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-[10px] font-bold rounded-full uppercase tracking-wider">Bloqueado</span>` : ''}
-                        ${isCompleted ? `<span class="inline-block px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold rounded-full uppercase tracking-wider">Concluído</span>` : ''}
-                        ${isSafety ? `<span class="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wider">Educativo</span>` : ''}
-                    </div>
+                    <span class="text-[10px] font-bold text-brand-text-secondary bg-brand-bg px-2 py-1 rounded-lg border border-brand-border">
+                        ${stepLabel}
+                    </span>
+                </div>
+
+                <h4 class="font-bold text-brand-text-primary text-base mb-1 leading-tight">${title}</h4>
+                <p class="text-xs text-brand-text-secondary leading-relaxed mb-6 flex-1">${desc}</p>
+
+                <div class="flex items-center justify-between mt-auto">
+                    <span class="text-[10px] font-medium text-brand-text-secondary flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        2 min
+                    </span>
+                    <button class="w-8 h-8 rounded-xl ${buttonClass} flex items-center justify-center transition-colors">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            ${isCompleted
+                ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />'
+                : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />'
+            }
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
     },
 
     addCardListeners() {
+        const accountsCard = document.getElementById('card-accounts');
         const identityCard = document.getElementById('card-identity');
-        const snapshotCard = document.getElementById('card-snapshot');
-        const refinementCard = document.getElementById('card-refinement');
-        const invCard = document.getElementById('card-investments');
+        const snapshotCard = document.getElementById('card-snapshot'); // Metas
+        const creditCard = document.getElementById('card-credit_cards'); // Cartões
 
-        if (identityCard && this.status.identity === 'active') {
-            identityCard.onclick = () => this.openIdentityModal();
+        // 1. Accounts -> Navigate to Investments (as requested)
+        if (accountsCard) {
+            accountsCard.onclick = () => {
+                window.app.navigateTo('investments');
+            };
         }
-        if (snapshotCard && this.status.snapshot === 'active') {
-            snapshotCard.onclick = () => this.openSnapshotModal();
+
+        // 2. Identity -> Navigate to Settings (Partners/Income Sources)
+        if (identityCard && this.status.identity === 'active') { // Keep active check for modals
+            identityCard.onclick = () => window.app.navigateTo('settings');
         }
-        if (refinementCard && (this.status.refinement === 'active' || this.status.snapshot === 'completed')) {
-            if (this.status.refinement === 'completed') {
-                // Already done? maybe allowed to edit or just do nothing
-            } else {
-                refinementCard.onclick = () => this.openRefinementModal();
-            }
+
+        // 3. Snapshot (Metas) -> Navigate to Goals
+        if (snapshotCard) {
+            snapshotCard.onclick = () => {
+                window.app.navigateTo('goals');
+            };
         }
-        if (invCard) {
-            if (this.status.investments === 'active') {
-                invCard.onclick = () => this.openInvestmentsModal();
-            } else if (this.status.investments === 'safety_mode') {
-                invCard.onclick = () => this.openSafetyModal();
+
+        // 4. Credit Cards -> Navigate to Wallet
+        if (creditCard) {
+            creditCard.onclick = () => {
+                window.app.navigateTo('wallet');
             }
         }
     },
@@ -333,22 +368,22 @@ export const OnboardingModule = {
                     <div>
                         <label class="block text-xs font-bold text-accent-gold uppercase mb-2">Renda Mensal (Média)</label>
                         <div class="relative">
-                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                            <input type="number" id="inp-income" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-12 pr-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-gold outline-none transition-colors" placeholder="0,00">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark"></span>
+                            <input type="text" id="inp-income" data-currency="true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-gold outline-none transition-colors" placeholder="R$ 0,00">
                         </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-red-500 dark:text-red-400 uppercase mb-2">Despesa Mensal (Custo de Vida)</label>
                         <div class="relative">
-                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                            <input type="number" id="inp-cost" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-12 pr-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-gold outline-none transition-colors" placeholder="0,00">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark"></span>
+                            <input type="text" id="inp-cost" data-currency="true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-gold outline-none transition-colors" placeholder="R$ 0,00">
                         </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-emerald-500 dark:text-emerald-400 uppercase mb-2">Reserva Atual (Disponível)</label>
                         <div class="relative">
-                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                            <input type="number" id="inp-balance" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-12 pr-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-success outline-none transition-colors" placeholder="0,00">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark"></span>
+                            <input type="text" id="inp-balance" data-currency="true" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-4 text-text-primary_light dark:text-text-primary_dark text-xl focus:border-accent-success outline-none transition-colors" placeholder="R$ 0,00">
                         </div>
                     </div>
                     <div>
@@ -364,12 +399,13 @@ export const OnboardingModule = {
                 </div>
             </div>
         `;
+        setTimeout(() => CurrencyMask.initAll(), 100);
     },
 
     async submitSnapshot() {
-        const income = parseFloat(document.getElementById('inp-income').value);
-        const cost = parseFloat(document.getElementById('inp-cost').value);
-        const balance = parseFloat(document.getElementById('inp-balance').value);
+        const income = CurrencyMask.unmaskToFloat(document.getElementById('inp-income').value);
+        const cost = CurrencyMask.unmaskToFloat(document.getElementById('inp-cost').value);
+        const balance = CurrencyMask.unmaskToFloat(document.getElementById('inp-balance').value);
         const age = parseInt(document.getElementById('inp-age').value);
         const profession = document.getElementById('inp-profession').value;
 
@@ -587,167 +623,148 @@ export const OnboardingModule = {
 
     // --- STEP 3: REFINEMENT ---
     openRefinementModal() {
-        // Updated to be a proper Overlay Modal, not replacing page content
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in';
+        modal.className = 'fixed inset-0 z-[9999] hidden'; // Managed by class list, but here we append directly so remove hidden or handle show
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+        modal.id = 'refinement-modal';
+
         modal.innerHTML = `
-            <div class="bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-4xl p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
-                <button onclick="this.closest('.fixed').remove()" class="absolute top-6 right-6 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark bg-slate-100 dark:bg-slate-800 rounded-full p-2 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+            <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="this.parentElement.remove()"></div>
+            <div class="relative w-full max-w-4xl bg-brand-surface border border-brand-border rounded-t-2xl md:rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col max-h-[90vh] h-full md:h-auto fixed bottom-0 md:relative md:bottom-auto">
                 
-                <h2 class="text-2xl font-bold text-text-primary_light dark:text-text-primary_dark mb-2 text-center">Configuração Inicial</h2>
-                <p class="text-center text-text-secondary_light dark:text-text-secondary_dark mb-8">Complete os itens abaixo para desbloquear seu painel.</p>
+                <!-- Drag Handle -->
+                <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                     <!-- 1. ACCOUNTS -->
-                     <button onclick="window.app.openAccountModal()" class="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-brand-500 hover:bg-brand-500/5 transition group">
-                        <div class="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-500 group-hover:text-white transition-colors">🏦</div>
-                        <span class="font-bold text-text-primary_light dark:text-text-primary_dark">Contas Bancárias</span>
-                        <span class="text-xs text-text-secondary_light dark:text-text-secondary_dark mt-1">Saldo inicial</span>
-                     </button>
-
-                     <!-- 2. CARDS -->
-                     <button onclick="window.app.openCardModal()" class="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-brand-500 hover:bg-brand-500/5 transition group">
-                        <div class="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-500 group-hover:text-white transition-colors">💳</div>
-                        <span class="font-bold text-text-primary_light dark:text-text-primary_dark">Cartão de Crédito</span>
-                        <span class="text-xs text-text-secondary_light dark:text-text-secondary_dark mt-1">Limites</span>
-                     </button>
-
-                     <!-- 3. GOALS -->
-                     <button onclick="window.app.openGoalModal()" class="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-brand-500 hover:bg-brand-500/5 transition group">
-                        <div class="w-12 h-12 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-500 group-hover:text-white transition-colors">🎯</div>
-                        <span class="font-bold text-text-primary_light dark:text-text-primary_dark">Definir Metas</span>
-                        <span class="text-xs text-text-secondary_light dark:text-text-secondary_dark mt-1">Sonhos</span>
-                     </button>
+                <!-- Header -->
+                <div class="p-6 pb-4 border-b border-brand-border shrink-0 flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-brand-text-primary">Configuração Inicial</h2>
+                    <button onclick="this.closest('.fixed').remove()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
                 </div>
 
-                <div class="text-center">
-                    <button onclick="window.app.checkRefinement()" class="bg-slate-200 dark:bg-slate-700 text-text-primary_light dark:text-text-primary_dark font-bold py-3 px-10 rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-transform">
+                <!-- Body -->
+                <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
+                    <p class="text-center text-brand-text-secondary mb-8">Complete os itens abaixo para desbloquear seu painel.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                         <!-- 1. ACCOUNTS -->
+                         <button onclick="window.app.openAccountModal()" class="flex flex-col items-center justify-center p-6 bg-brand-bg border border-brand-border rounded-xl hover:border-brand-gold hover:bg-brand-gold/5 transition group h-full">
+                            <div class="w-12 h-12 rounded-full bg-brand-surface-light flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-gold group-hover:text-brand-darker transition-colors shadow-sm">🏦</div>
+                            <span class="font-bold text-brand-text-primary">Contas Bancárias</span>
+                            <span class="text-xs text-brand-text-secondary mt-1">Saldo inicial</span>
+                         </button>
+
+                         <!-- 2. CARDS -->
+                         <button onclick="window.app.openCardModal()" class="flex flex-col items-center justify-center p-6 bg-brand-bg border border-brand-border rounded-xl hover:border-brand-gold hover:bg-brand-gold/5 transition group h-full">
+                            <div class="w-12 h-12 rounded-full bg-brand-surface-light flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-gold group-hover:text-brand-darker transition-colors shadow-sm">💳</div>
+                            <span class="font-bold text-brand-text-primary">Cartão de Crédito</span>
+                            <span class="text-xs text-brand-text-secondary mt-1">Limites</span>
+                         </button>
+
+                         <!-- 3. GOALS -->
+                         <button onclick="window.app.openGoalModal()" class="flex flex-col items-center justify-center p-6 bg-brand-bg border border-brand-border rounded-xl hover:border-brand-gold hover:bg-brand-gold/5 transition group h-full">
+                            <div class="w-12 h-12 rounded-full bg-brand-surface-light flex items-center justify-center text-2xl mb-3 group-hover:bg-brand-gold group-hover:text-brand-darker transition-colors shadow-sm">🎯</div>
+                            <span class="font-bold text-brand-text-primary">Definir Metas</span>
+                            <span class="text-xs text-brand-text-secondary mt-1">Sonhos</span>
+                         </button>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="p-6 border-t border-brand-border bg-brand-surface shrink-0 text-center">
+                    <button onclick="window.app.checkRefinement()" class="bg-brand-surface-light text-brand-text-primary font-bold py-3 px-10 rounded-xl hover:bg-brand-border transition-transform w-full md:w-auto">
                         Verificar Conclusão
                     </button>
-                     <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark mt-4 max-w-md mx-auto">Ao concluir, este card desaparecerá e você terá acesso completo ao dashboard.</p>
+                     <p class="text-[10px] text-brand-text-secondary mt-4 max-w-md mx-auto">Ao concluir, este card desaparecerá e você terá acesso completo ao dashboard.</p>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
     },
 
+
+
+    // --- OPEN ACCOUNT MODAL (Delegated or Custom) ---
     openAccountModal() {
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+        modal.id = 'account-onb-modal';
+
         modal.innerHTML = `
-            <div class="bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-md p-8 shadow-2xl relative">
-                <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark bg-slate-100 dark:bg-slate-800 rounded-full p-2 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-                <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-6">Nova Conta</h3>
+            <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="this.parentElement.remove()"></div>
+            <div class="relative w-full max-w-md bg-brand-surface border border-brand-border rounded-t-2xl md:rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col max-h-[90vh] h-full md:h-auto fixed bottom-0 md:relative md:bottom-auto">
                 
-                <form id="onb-acc-form" class="space-y-4">
-                     <input type="text" name="name" placeholder="Nome (ex: Nubank)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
+                <!-- Drag Handle -->
+                <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+
+                <!-- Header -->
+                <div class="p-6 pb-4 border-b border-brand-border shrink-0 flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-brand-text-primary">Nova Conta</h3>
+                    <button onclick="this.closest('.fixed').remove()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414 1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Body -->
+                <form id="onb-account-form" class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                     <div>
+                        <input type="text" name="name" placeholder="Nome da Conta (ex: Nubank)" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors font-medium placeholder-brand-text-secondary" required>
+                     </div>
                      
                      <div class="relative">
-                         <select name="type" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors appearance-none cursor-pointer">
-                            <option value="checking">Corrente</option>
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text-secondary"></span>
+                        <input type="text" name="initial_balance" data-currency="true" placeholder="R$ 0,00" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors font-medium" required>
+                     </div>
+
+                     <div class="relative">
+                        <select name="type" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors appearance-none font-medium">
+                            <option value="checking">Conta Corrente</option>
+                            <option value="savings">Poupança</option>
                             <option value="investment">Investimento</option>
-                            <option value="wallet">Carteira Física</option>
-                         </select>
-                         <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-text-secondary_light dark:text-text-secondary_dark">
+                            <option value="cash">Carteira/Dinheiro</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-brand-text-secondary">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                      </div>
-
-                     <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                        <input type="number" step="0.01" name="balance" placeholder="Saldo Inicial" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pl-10 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
-                     </div>
-                     
-                     <button type="submit" class="w-full bg-accent-gold text-white font-bold py-3 rounded-xl hover:bg-amber-500 shadow-md transition-all hover:scale-[1.02] mt-2">Salvar</button>
+                     <div class="pb-24 md:pb-0"></div>
                 </form>
+
+                <!-- Footer -->
+                <div class="p-6 border-t border-brand-border bg-brand-surface shrink-0 safe-area-bottom z-10 relative">
+                     <button type="submit" form="onb-account-form" class="w-full bg-brand-gold text-brand-darker font-bold py-4 rounded-xl shadow-lg shadow-brand-gold/20 hover:bg-yellow-500 transition-all hover:scale-[1.02]">Salvar Conta</button>
+                </div>
             </div>
         `;
         document.body.appendChild(modal);
+        CurrencyMask.initAll();
 
         modal.querySelector('form').onsubmit = async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target);
             try {
-                const acc = await SettingsService.createAccount({
+                // Use AccountsService to create account and update state automatically
+                await AccountsService.create({
                     name: fd.get('name'),
-                    type: fd.get('type')
+                    type: fd.get('type'),
+                    initial_balance: CurrencyMask.unmask(fd.get('initial_balance')), // Convert to cents
+                    // color, icon etc. can be defaults if not present
+                    color: '#10B981', // Default Green
+                    include_in_total: true,
+                    is_active: true
                 });
 
-                const balance = parseFloat(fd.get('balance'));
-                if (balance > 0) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    await supabase.from('transactions').insert({
-                        user_id: user.id,
-                        description: 'Saldo Inicial',
-                        amount: Math.round(balance * 100),
-                        date: new Date().toISOString(),
-                        type: 'income', // Treated as income for initial balance usually
-                        account_id: acc.id,
-                        is_paid: true
-                    });
-                }
-
-                Toast.show('Conta criada!', 'success');
+                Toast.show('Conta adicionada!', 'success');
                 modal.remove();
-                this.checkRefinement(); // Check if ready
+                this.checkRefinement();
 
             } catch (err) {
-                Toast.show('Erro: ' + err.message, 'error');
-            }
-        };
-    },
-
-    openCardModal() {
-        const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in';
-        modal.innerHTML = `
-            <div class="bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-md p-8 shadow-2xl relative">
-                <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark bg-slate-100 dark:bg-slate-800 rounded-full p-2 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-                <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-6">Novo Cartão</h3>
-                
-                <form id="onb-card-form" class="space-y-4">
-                     <input type="text" name="name" placeholder="Nome (ex: XP Visa Infinite)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
-                     <div class="flex gap-4">
-                        <input type="number" name="closing_day" placeholder="Dia Fech." class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
-                        <input type="number" name="due_day" placeholder="Dia Venc." class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
-                     </div>
-                     <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                        <input type="number" step="0.01" name="limit" placeholder="Limite (Opcional)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pl-10 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors">
-                     </div>
-                     
-                     <button type="submit" class="w-full bg-accent-gold text-white font-bold py-3 rounded-xl hover:bg-amber-500 shadow-md transition-all hover:scale-[1.02] mt-2">Salvar</button>
-                </form>
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        modal.querySelector('form').onsubmit = async (e) => {
-            e.preventDefault();
-            const fd = new FormData(e.target);
-            try {
-                await SettingsService.createCard({
-                    name: fd.get('name'),
-                    closing_day: parseInt(fd.get('closing_day')),
-                    due_day: parseInt(fd.get('due_day')),
-                    limit: parseFloat(fd.get('limit')) ? Math.round(parseFloat(fd.get('limit')) * 100) : null
-                });
-
-                Toast.show('Cartão criado!', 'success');
-                modal.remove();
-            } catch (err) {
+                console.error(err);
                 Toast.show('Erro: ' + err.message, 'error');
             }
         };
@@ -755,34 +772,52 @@ export const OnboardingModule = {
 
     openGoalModal() {
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[200] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+        modal.id = 'goal-onb-modal';
+
         modal.innerHTML = `
-            <div class="bg-background-card_light dark:bg-background-card_dark border border-slate-200 dark:border-slate-700 rounded-3xl w-full max-w-md p-8 shadow-2xl relative">
-                <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark bg-slate-100 dark:bg-slate-800 rounded-full p-2 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-                <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-6">Nova Meta</h3>
+            <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="this.parentElement.remove()"></div>
+            <div class="relative w-full max-w-md bg-brand-surface border border-brand-border rounded-t-2xl md:rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col max-h-[90vh] h-full md:h-auto fixed bottom-0 md:relative md:bottom-auto">
                 
-                <form id="onb-goal-form" class="space-y-4">
-                     <input type="text" name="name" placeholder="Nome da Meta (ex: Viagem)" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
+                <!-- Drag Handle -->
+                <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+
+                <!-- Header -->
+                <div class="p-6 pb-4 border-b border-brand-border shrink-0 flex justify-between items-center">
+                    <h3 class="text-xl font-bold text-brand-text-primary">Nova Meta</h3>
+                    <button onclick="this.closest('.fixed').remove()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Body -->
+                <form id="onb-goal-form" class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4">
+                     <div>
+                        <input type="text" name="name" placeholder="Nome da Meta (ex: Viagem)" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors font-medium placeholder-brand-text-secondary" required>
+                     </div>
                      
                      <div class="relative">
-                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark">R$</span>
-                        <input type="number" step="0.01" name="target_amount" placeholder="Valor Alvo" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 pl-10 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text-secondary"></span>
+                        <input type="text" name="target_amount" data-currency="true" placeholder="R$ 0,00" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors font-medium" required>
                      </div>
                      
                      <div>
-                        <label class="text-xs text-text-secondary_light dark:text-text-secondary_dark uppercase font-bold block mb-1">Data Limite</label>
-                        <input type="date" name="deadline" class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-text-primary_light dark:text-text-primary_dark outline-none focus:border-accent-gold transition-colors" required>
+                        <label class="text-xs text-brand-text-secondary uppercase font-bold block mb-1">Data Limite</label>
+                        <input type="date" name="deadline" class="w-full bg-brand-bg border border-brand-border rounded-xl p-4 text-brand-text-primary outline-none focus:border-brand-gold transition-colors font-medium" required>
                      </div>
-                     
-                     <button type="submit" class="w-full bg-accent-gold text-white font-bold py-3 rounded-xl hover:bg-amber-500 shadow-md transition-all hover:scale-[1.02] mt-2">Criar Meta</button>
+                     <div class="pb-24 md:pb-0"></div>
                 </form>
+
+                <!-- Footer -->
+                <div class="p-6 border-t border-brand-border bg-brand-surface shrink-0 safe-area-bottom z-10 relative">
+                     <button type="submit" form="onb-goal-form" class="w-full bg-brand-gold text-brand-darker font-bold py-4 rounded-xl shadow-lg shadow-brand-gold/20 hover:bg-yellow-500 transition-all hover:scale-[1.02]">Criar Meta</button>
+                </div>
             </div>
         `;
         document.body.appendChild(modal);
+        CurrencyMask.initAll();
 
         modal.querySelector('form').onsubmit = async (e) => {
             e.preventDefault();
@@ -790,7 +825,9 @@ export const OnboardingModule = {
             try {
                 const { data: { user } } = await supabase.auth.getUser();
 
-                const amount = Math.round(parseFloat(fd.get('target_amount')) * 100);
+                const amount = CurrencyMask.unmask(fd.get('target_amount')); // Goals stores integer cents usually? verify.
+                // Original was: Math.round(parseFloat(fd.get('target_amount')) * 100);
+                // CurrencyMask.unmask returns cents integer. Perfect.
 
                 const { error } = await supabase.from('goals').insert({
                     user_id: user.id,
@@ -843,24 +880,26 @@ export const OnboardingModule = {
     // --- STEP 4: INVESTMENTS (Logic) ---
     openSafetyModal() {
         const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 animate-fade-in';
+        modal.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
+
         modal.innerHTML = `
-            <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-lg p-8 shadow-2xl relative">
-                <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
+            <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="this.parentElement.remove()"></div>
+            <div class="relative w-full max-w-lg bg-brand-surface border border-brand-border rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col p-8 md:p-8 space-y-4">
+                <button onclick="this.closest('.fixed').remove()" class="absolute top-4 right-4 text-brand-text-secondary hover:text-brand-text-primary">✕</button>
                 
                 <div class="text-center space-y-4">
                     <div class="text-5xl mb-4">🛡️</div>
-                    <h2 class="text-2xl font-bold text-white">Segurança Primeiro!</h2>
-                    <p class="text-brand-text-secondary">
+                    <h2 class="text-2xl font-bold text-brand-text-primary">Segurança Primeiro!</h2>
+                    <p class="text-brand-text-secondary leading-relaxed">
                         Identificamos que sua reserva ainda está abaixo da meta recomendada de 6 meses de custo de vida.
                     </p>
-                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 my-6">
-                        <p class="text-blue-300 font-medium">Recomendação Moneta</p>
-                        <p class="text-gray-300 text-sm mt-2">
+                    <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 my-6 text-left">
+                        <p class="text-blue-400 font-bold mb-1">Recomendação Moneta</p>
+                        <p class="text-brand-text-secondary text-sm">
                             Foque 100% dos seus aportes em <strong>Renda Fixa com Liquidez Diária</strong> (Tesouro Selic ou CDB 100% CDI) até atingir sua meta.
                         </p>
                     </div>
-                    <button onclick="this.closest('.fixed').remove()" class="bg-gray-700 text-white font-bold py-3 px-8 rounded-xl hover:bg-gray-600 transition">Entendi</button>
+                    <button onclick="this.closest('.fixed').remove()" class="bg-brand-surface-light text-brand-text-primary font-bold py-3 px-8 rounded-xl hover:bg-brand-border transition w-full">Entendi</button>
                 </div>
             </div>
         `;
@@ -870,17 +909,18 @@ export const OnboardingModule = {
     openInvestmentsModal() {
         // Disclaimer Modal First
         const disclaimer = document.createElement('div');
-        disclaimer.className = 'fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 animate-fade-in';
+        disclaimer.className = 'fixed inset-0 z-[9999] flex items-center justify-center p-4';
         disclaimer.innerHTML = `
-            <div class="bg-brand-surface border border-brand-border rounded-3xl w-full max-w-lg p-8 shadow-2xl relative border-l-4 border-l-brand-gold">
+            <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="this.parentElement.remove()"></div>
+            <div class="relative w-full max-w-lg bg-brand-surface border border-brand-border rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col p-8 border-l-4 border-l-brand-gold">
                 <h2 class="text-xl font-bold text-brand-gold mb-4 uppercase tracking-widest">Aviso Legal</h2>
-                <div class="prose prose-invert text-sm text-brand-text-secondary mb-6">
+                <div class="prose prose-invert text-sm text-brand-text-secondary mb-8 leading-relaxed">
                     <p>As sugestões a seguir são geradas por algoritmos baseados em regras gerais de mercado (ex: Regra dos 100) e <strong>NÃO constituem recomendação de investimento personalizada</strong>.</p>
                     <p>O Moneta não se responsabiliza por perdas financeiras. Consulte um consultor certificado CVM para recomendações específicas.</p>
                 </div>
                 <div class="flex gap-4">
-                    <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-transparent border border-brand-border text-white py-3 rounded-xl hover:bg-white/5">Cancelar</button>
-                    <button onclick="this.closest('.fixed').remove(); window.app.showAllocation();" class="flex-1 bg-brand-gold text-brand-darker font-bold py-3 rounded-xl hover:opacity-90">Aceitar e Continuar</button>
+                    <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-transparent border border-brand-border text-brand-text-secondary py-3 rounded-xl hover:bg-brand-surface-light font-medium transition">Cancelar</button>
+                    <button onclick="this.closest('.fixed').remove(); window.app.showAllocation();" class="flex-1 bg-brand-gold text-brand-darker font-bold py-3 rounded-xl hover:opacity-90 shadow-lg shadow-brand-gold/10">Aceitar e Continuar</button>
                 </div>
             </div>
         `;

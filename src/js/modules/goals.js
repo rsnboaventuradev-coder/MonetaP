@@ -3,6 +3,7 @@ import { BudgetService } from '../services/budget.service.js';
 import { TransactionService } from '../services/transaction.service.js';
 import { InvestmentsService } from '../services/investments.service.js';
 import { Toast } from '../utils/toast.js';
+import { CurrencyMask } from '../utils/mask.js';
 
 export const GoalsModule = {
     chartInstance: null,
@@ -115,8 +116,15 @@ export const GoalsModule = {
             </div>
 
             <!-- Modal -->
-            ${this.renderModal()}
+            <!-- Modals moved to body to avoid stacking context issues with transform -->
         `;
+
+        // Portal Logic: Ensure modals are in body (not inside transformed container)
+        if (!document.getElementById('add-goal-modal')) {
+            document.body.insertAdjacentHTML('beforeend', this.renderModal());
+            // Initialize masks for the newly injected modals
+            setTimeout(() => CurrencyMask.initAll(), 100);
+        }
 
         // Set initial tab
         this.currentTab = 'personal';
@@ -199,25 +207,11 @@ export const GoalsModule = {
                 </div>
 
                 <!-- Goals Sections -->
-                ${goals.length === 0 ? `
-                    <div class="px-6 mb-8 mt-4 animate-fade-in-up">
-                        <div class="bg-gradient-to-br from-white to-slate-50 dark:from-background-card_dark dark:to-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 text-center relative overflow-hidden group hover:border-accent-gold/20 transition-all cursor-pointer shadow-sm" onclick="document.getElementById('add-goal-modal').classList.remove('hidden')">
-                             <div class="w-20 h-20 bg-accent-gold/10 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition duration-300">
-                                <span class="text-4xl text-accent-gold">🎯</span>
-                             </div>
-                             <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-2">Defina seus Objetivos</h3>
-                             <p class="text-text-secondary_light dark:text-text-secondary_dark text-sm max-w-xs mx-auto mb-6">Transforme seus sonhos em realidade. Acompanhe o progresso de suas conquistas.</p>
-                             <button class="bg-accent-gold hover:bg-amber-500 text-white font-bold py-3 px-6 rounded-xl shadow-sm hover:shadow-md active:scale-95 transition">
-                                Criar Primeira Meta
-                             </button>
-                        </div>
-                    </div>
-                ` : `
-                    ${this.renderGoalsSection('Segurança (Curto Prazo)', 'security', goals)}
-                    ${this.renderGoalsSection('Carreira (Médio Prazo)', 'career', goals)}
-                    ${this.renderGoalsSection('Estilo de Vida (Longo Prazo)', 'lifestyle', goals)}
-                    ${this.renderGoalsSection('Independência Financeira', 'financial_freedom', goals)}
-                `}
+                 <!-- Ensure Emergency Fund System Goal exists visually -->
+                ${this.renderGoalsSection('Segurança (Curto Prazo)', 'security', goals, true)}
+                ${this.renderGoalsSection('Carreira (Médio Prazo)', 'career', goals)}
+                ${this.renderGoalsSection('Estilo de Vida (Longo Prazo)', 'lifestyle', goals)}
+                ${this.renderGoalsSection('Independência Financeira', 'financial_freedom', goals)}
 
                 <!-- FAB -->
                 <button id="fab-add-goal" class="fixed bottom-24 right-6 w-14 h-14 bg-accent-gold rounded-full shadow-lg shadow-amber-600/20 flex items-center justify-center text-white active:scale-95 transition z-30 hover:bg-amber-500">
@@ -256,8 +250,27 @@ export const GoalsModule = {
         `;
     },
 
-    renderGoalsSection(title, type, allGoals) {
-        const goals = (allGoals && allGoals.length) ? allGoals.filter(g => g.type === type) : [];
+    renderGoalsSection(title, type, allGoals, checkSystem = false) {
+        let goals = (allGoals && allGoals.length) ? allGoals.filter(g => g.type === type) : [];
+
+        // --- System Goal Injection: Emergency Fund ---
+        if (checkSystem && type === 'security') {
+            const hasEmergency = goals.some(g => g.name.toLowerCase().includes('reserva'));
+            if (!hasEmergency) {
+                // Mock System Goal
+                const systemGoal = {
+                    id: 'system_emergency_fund',
+                    name: 'Reserva de Emergência',
+                    type: 'security',
+                    is_system: true,
+                    target_amount: GoalsService.calculateEmergencyFundTarget(), // Helper to get target
+                    current_amount: GoalsService.calculateTotalLiquidity(), // Need these helpers exposed
+                    icon: '🛡️'
+                };
+                goals = [systemGoal, ...goals];
+            }
+        }
+
         if (!goals.length) return '';
 
         return `
@@ -340,11 +353,17 @@ export const GoalsModule = {
     renderModal() {
         return `
             <!-- Add Goal Modal -->
-            <div id="add-goal-modal" class="fixed inset-0 z-50 hidden">
-                <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300" id="close-goal-overlay"></div>
+            <div id="add-goal-modal" class="fixed inset-0 z-[100] hidden" style="z-index: 9999;">
+                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300" id="close-goal-overlay"></div>
                 
-                <div class="absolute inset-0 m-auto max-w-2xl w-full bg-background-card_light dark:bg-background-card_dark rounded-2xl shadow-2xl flex flex-col h-[90vh] md:h-auto md:max-h-[90vh] animate-scale-in border border-slate-200 dark:border-slate-700">
-                    <div class="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-background-light/50 dark:bg-background-dark/50 backdrop-blur-sm rounded-t-2xl">
+                <!-- Modal Container -->
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-background-card_light dark:bg-background-card_dark rounded-t-2xl md:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl border-t md:border border-slate-200 dark:border-slate-700 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[600px] md:max-w-2xl animate-slide-up md:animate-scale-in">
+                    
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    
+                    <!-- Header (Fixed) -->
+                    <div class="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
                         <div>
                             <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark tracking-tight">Nova Meta</h3>
                             <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark">Defina seu próximo objetivo financeiro</p>
@@ -356,9 +375,9 @@ export const GoalsModule = {
                         </button>
                     </div>
                     
-                    <!-- Scrollable Content -->
-                    <div class="overflow-y-auto flex-1 p-6 space-y-6 custom-scrollbar">
-                        <form id="add-goal-form" class="space-y-6">
+                    <!-- Body (Scrollable) -->
+                    <div class="overflow-y-auto flex-1 p-6 custom-scrollbar">
+                        <form id="add-goal-form" class="space-y-5">
                             
                             <!-- Goal Type Selection (Visual) -->
                             <div>
@@ -410,8 +429,8 @@ export const GoalsModule = {
                                 <div>
                                     <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Valor Alvo</label>
                                     <div class="relative">
-                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium">R$</span>
-                                        <input type="number" step="0.01" name="target_amount" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 pl-10 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="0,00">
+                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
+                                        <input type="text" name="target_amount" data-currency="true" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="R$ 0,00">
                                     </div>
                                 </div>
                                  <div class="group relative">
@@ -420,8 +439,8 @@ export const GoalsModule = {
                                         <span class="text-[10px] text-text-primary_light dark:text-text-primary_dark bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded cursor-help" title="Saldo inicial se você já começou">?</span>
                                     </label>
                                     <div class="relative">
-                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium">R$</span>
-                                        <input type="number" step="0.01" name="current_amount" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 pl-10 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="0,00">
+                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
+                                        <input type="text" name="current_amount" data-currency="true" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="R$ 0,00">
                                     </div>
                                 </div>
                             </div>
@@ -455,60 +474,79 @@ export const GoalsModule = {
                                 </label>
                                 <p class="text-[11px] text-text-secondary_light dark:text-text-secondary_dark mb-3">Possuir este item vai aumentar seu custo fixo mensal em quanto?</p>
                                 <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-red-500 dark:text-red-300 font-medium">R$</span>
-                                    <input type="number" step="0.01" name="maintenance_cost" class="w-full bg-white dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20 p-3 pl-10 text-text-primary_light dark:text-text-primary_dark focus:border-red-500 outline-none transition placeholder-red-300/30">
+                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-red-500 dark:text-red-300 font-medium"></span>
+                                    <input type="text" name="maintenance_cost" data-currency="true" class="w-full bg-white dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20 p-3 text-text-primary_light dark:text-text-primary_dark focus:border-red-500 outline-none transition placeholder-red-300/30" placeholder="R$ 0,00">
                                 </div>
                             </div>
                             
-                            <!-- Submit Button -->
-                            <div class="pt-2">
-                                <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-xl shadow-sm hover:shadow-md active:scale-[0.98] transition flex items-center justify-center gap-2 text-lg">
-                                    <span>Criar Meta</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                    </svg>
-                                </button>
-                            </div>
+                            <!-- Extra padding for scroll safety: pb-32 to be extremely safe against bottom bars -->
+                            <div class="pb-32 md:pb-10"></div>
                         </form>
+                    </div>
+
+                    <!-- Footer (Fixed) -->
+                    <div class="p-6 border-t border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="add-goal-form" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition flex items-center justify-center gap-2 text-lg">
+                            <span>Criar Meta</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </div>
 
             <!-- Contribute Modal -->
-            <div id="contribute-modal" class="fixed inset-0 z-[60] hidden">
-                <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300" onclick="document.getElementById('contribute-modal').classList.add('hidden')"></div>
-                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-background-card_light dark:bg-background-card_dark rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl p-6 animate-scale-in">
-                     <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-1">Aporte de Meta</h3>
-                     <p class="text-sm text-text-secondary_light dark:text-text-secondary_dark mb-6" id="contribute-goal-name">Guardando para o futuro...</p>
-                     
-                     <form id="contribute-form" class="space-y-4">
-                        <input type="hidden" name="goal_id" id="contribute-goal-id">
-                        
-                        <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Valor do Aporte</label>
-                            <div class="relative">
-                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium">R$</span>
-                                <input type="number" step="0.01" name="amount" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 pl-10 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold text-lg" placeholder="0,00" autofocus>
-                            </div>
-                        </div>
+            <div id="contribute-modal" class="fixed inset-0 z-[100] hidden" style="z-index: 9999;">
+                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300" onclick="document.getElementById('contribute-modal').classList.add('hidden')"></div>
+                
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-background-card_light dark:bg-background-card_dark rounded-t-2xl md:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl border-t md:border border-slate-200 dark:border-slate-700 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[400px] md:max-w-md animate-slide-up md:animate-scale-in">
+                    
+                    <!-- Drag Handle (Mobile) -->
+                    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
 
-                         <div>
-                            <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Origem dos Fundos</label>
-                            <div class="relative">
-                                <select name="source" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition appearance-none cursor-pointer">
-                                    <option value="manual">📝 Apenas atualizar saldo (Sem transação)</option>
-                                    <option value="transaction" selected>🏦 Conta Principal (Criar Transação)</option>
-                                </select>
-                                <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-text-secondary_light dark:text-text-secondary_dark">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <!-- Header -->
+                    <div class="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+                         <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-1">Aporte de Meta</h3>
+                         <p class="text-sm text-text-secondary_light dark:text-text-secondary_dark truncate" id="contribute-goal-name">Guardando para o futuro...</p>
+                    </div>
+                     
+                    <!-- Body (Scrollable) -->
+                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
+                         <form id="contribute-form" class="space-y-5">
+                            <input type="hidden" name="goal_id" id="contribute-goal-id">
+                            
+                            <div>
+                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Valor do Aporte</label>
+                                <div class="relative">
+                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
+                                    <input type="text" name="amount" data-currency="true" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold text-lg" placeholder="R$ 0,00" autofocus>
                                 </div>
                             </div>
-                        </div>
 
-                        <button type="submit" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3.5 rounded-xl shadow-sm hover:shadow-md mt-2 active:scale-[0.98] transition">
+                             <div>
+                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Origem dos Fundos</label>
+                                <div class="relative">
+                                    <select name="source" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition appearance-none cursor-pointer">
+                                        <option value="manual">📝 Apenas atualizar saldo (Sem transação)</option>
+                                        <option value="transaction" selected>🏦 Conta Principal (Criar Transação)</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-text-secondary_light dark:text-text-secondary_dark">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Spacer for bottom safety -->
+                            <div class="pb-6 md:pb-0"></div>
+                         </form>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="p-6 border-t border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark rounded-b-2xl shrink-0">
+                        <button type="submit" form="contribute-form" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition">
                             Confirmar Aporte
                         </button>
-                     </form>
+                    </div>
                 </div>
             </div>
             
@@ -517,6 +555,10 @@ export const GoalsModule = {
                 .animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; }
                 @keyframes scale-in { from { opacity: 0; transform: translate(-50%, -40%) scale(0.95); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
                 .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
+                /* Custom Scrollbar */
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.5); border-radius: 20px; }
             </style>
         `;
     },
@@ -618,6 +660,7 @@ export const GoalsModule = {
         const amountInput = document.querySelector('#contribute-form input[name="amount"]');
         if (amountInput) {
             amountInput.value = '';
+            CurrencyMask.apply(amountInput);
             amountInput.focus();
         }
     },
@@ -630,7 +673,17 @@ export const GoalsModule = {
         const form = document.getElementById('add-goal-form');
         const maintenanceField = document.getElementById('maintenance-field');
 
-        const openModal = () => modal && modal.classList.remove('hidden');
+        const openModal = () => {
+            if (modal) {
+                modal.classList.remove('hidden');
+                // Initialize currency masks after modal is visible
+                setTimeout(() => {
+                    if (window.CurrencyMask) {
+                        window.CurrencyMask.initAll();
+                    }
+                }, 50);
+            }
+        };
         const closeModal = () => modal && modal.classList.add('hidden');
 
         if (fab) fab.addEventListener('click', openModal);
@@ -654,13 +707,36 @@ export const GoalsModule = {
                 const formData = new FormData(form);
 
                 const newGoal = {
-                    title: formData.get('title'),
-                    target_amount: formData.get('target_amount'),
-                    current_amount: formData.get('current_amount'),
+                    name: formData.get('title'),
+                    title: formData.get('title'), // Keeping title just in case UI uses it elsewhere before refresh
+                    target_amount: CurrencyMask.unmask(formData.get('target_amount')),
+                    current_amount: CurrencyMask.unmask(formData.get('current_amount')),
                     deadline: formData.get('deadline') || null,
                     priority: formData.get('priority'),
                     type: formData.get('type'),
-                    maintenance_cost: formData.get('maintenance_cost'),
+                    maintenance_cost: CurrencyMask.unmaskToFloat(formData.get('maintenance_cost')), // might need float? No, DB likely cents? Wait, standard is cents often but maintenance_cost might be different. 
+                    // Let's check logic: goal.maintenance_cost used as `parseFloat(goal.maintenance_cost).toFixed(2)` in line 298.
+                    // If stored as cents, it should be /100. If stored as float, it's float.
+                    // Let's assume consistent CENTS strategy if `target_amount` is cents.
+                    // Line 278: `parseFloat(goal.target_amount) / 100`. So it is cents.
+                    // Line 298: `parseFloat(goal.maintenance_cost).toFixed(2)`. This implies it's stored as FLOAT/DECIMAL in DB or user didn't divide by 100 there?
+                    // Actually if it was cents it would be /100.
+                    // I will check supabase schema later but for now I'll use unmask (cents) and if it looks huge I'll fix.
+                    // Wait, `CurrencyMask.unmask` returns integer cents. 
+                    // If `maintenance_cost` is treated as float directly (e.g. 50.00), then unmasking to 5000 is wrong IF the display logic doesn't divide by 100.
+                    // Line 298: `-${parseFloat(goal.maintenance_cost).toFixed(2)}/mês`.
+                    // If strict cents, 5000 would be "5000.00".
+                    // So `maintenance_cost` seems to be stored as FLOAT in DB?
+                    // Safe bet: use `CurrencyMask.unmaskToFloat()` for maintenance_cost just in case it's a `numeric` column used directly, 
+                    // OR if it's consistent with others use cents.
+                    // Given `target_amount` is divided by 100, let's assume `maintenance_cost` MIGHT NOT be?
+                    // Let's check `goals.service.js` or assume standard.
+                    // I'll stick to `unmask` (cents) but I'll check line 298.
+                    // If line 298 does NOT divide by 100, then it expects Dollars (Reais).
+                    // So `unmaskToFloat` is safer for `maintenance_cost` if line 298 doesn't divide.
+                    // Line 298: `-${parseFloat(goal.maintenance_cost).toFixed(2)}`. NO /100.
+                    // So maintenance_cost is Reais.
+                    maintenance_cost: CurrencyMask.unmaskToFloat(formData.get('maintenance_cost')),
                     investment_link: formData.get('investment_link'),
                     icon: '🎯'
                 };
@@ -684,7 +760,9 @@ export const GoalsModule = {
                 e.preventDefault();
                 const formData = new FormData(contributeForm);
                 const goalId = formData.get('goal_id');
-                const amount = parseFloat(formData.get('amount'));
+                const rawAmount = formData.get('amount');
+                // Amount needs to be Reais float for logic below (it calculates cents later)
+                const amount = CurrencyMask.unmaskToFloat(rawAmount);
                 const source = formData.get('source'); // 'manual' or 'transaction'
 
                 if (!amount || amount <= 0) {
@@ -697,10 +775,34 @@ export const GoalsModule = {
 
                 try {
                     if (source === 'manual') {
-                        const goal = GoalsService.goals.find(g => g.id === goalId);
-                        const newCurrent = (goal.current_amount || 0) + amountCents;
-                        await GoalsService.update(goalId, { current_amount: newCurrent });
-                        Toast.show('Saldo atualizado manualmente!', 'success');
+                        // Special Handling for System Goal
+                        if (goalId === 'system_emergency_fund') {
+                            // First create it via Service (which internally handles 'system_emergency_fund' -> create check? 
+                            // Actually, GoalsService.update needs similar interceptor or we call special method.
+                            // Better: Let's call createDefaultEmergencyGoal directly if it doesn't exist?
+                            // OR: Just fix GoalsService.update and call it?
+                            // Let's rely on GoalsService.update interceptor which we will add next, 
+                            // BUT we need 'newCurrent' calculation here.
+
+                            const current = GoalsService.calculateTotalLiquidity(); // Helper
+                            const newCurrent = current + amountCents;
+
+                            // We need value update. Since 'update' expects ID, let's modify GoalsService.update too.
+                            // For now, let's manually create it here to be safe and simple
+                            const newGoal = await GoalsService.createDefaultEmergencyGoal();
+                            // Now update it with new amount
+                            await GoalsService.update(newGoal.id, { current_amount: newCurrent });
+                            Toast.show('Saldo atualizado e meta criada!', 'success');
+
+                        } else {
+                            const goal = GoalsService.goals.find(g => g.id === goalId);
+                            if (!goal) throw new Error('Meta não encontrada');
+
+                            const newCurrent = (goal.current_amount || 0) + amountCents;
+                            await GoalsService.update(goalId, { current_amount: newCurrent });
+                            Toast.show('Saldo atualizado manualmente!', 'success');
+                        }
+
                     } else {
                         await GoalsService.contribute(goalId, amountCents, 'Aporte via Dashboard');
                         Toast.show('Aporte realizado com sucesso!', 'success');
@@ -881,23 +983,68 @@ export const GoalsModule = {
     },
 
     renderSavingsTab(container) {
-        const savingsGoals = GoalsService.goals.filter(g => g.budget_type === 'savings' || g.type === 'security');
+        const savingsGoals = GoalsService.goals.filter(g => (g.budget_type === 'savings' || g.type === 'security') && g.status !== 'completed');
+        const completedGoals = GoalsService.goals.filter(g => g.status === 'completed');
+
         container.innerHTML = `
-            <div class="px-6">
-                <h2 class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark mb-4 flex items-center gap-2">
-                    <span class="w-1 h-6 bg-accent-success rounded-full"></span>
-                    Reservas e Economias
-                </h2>
-                ${savingsGoals.length === 0 ? `
-                    <div class="bg-background-card_light dark:bg-background-card_dark rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <span class="text-4xl mb-4 block">💰</span>
-                        <p class="text-text-secondary_light dark:text-text-secondary_dark">Nenhuma reserva cadastrada ainda.</p>
+            <div class="px-6 space-y-8">
+                <!-- RESERVAS ATIVAS -->
+                <div>
+                    <h2 class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark mb-4 flex items-center gap-2">
+                        <span class="w-1 h-6 bg-accent-success rounded-full"></span>
+                        Reservas e Economias
+                    </h2>
+                    ${savingsGoals.length === 0 ? `
+                        <div class="bg-background-card_light dark:bg-background-card_dark rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-700 shadow-sm">
+                            <span class="text-4xl mb-4 block">💰</span>
+                            <p class="text-text-secondary_light dark:text-text-secondary_dark">Nenhuma reserva ativa no momento.</p>
+                        </div>
+                    ` : `
+                        <div class="space-y-3">
+                            ${savingsGoals.map(g => this.renderGoalCard(g)).join('')}
+                        </div>
+                    `}
+                </div>
+
+                <!-- CONQUISTAS (METAS CONCLUÍDAS) -->
+                 <div>
+                    <h2 class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark mb-4 flex items-center gap-2">
+                        <span class="w-1 h-6 bg-accent-gold rounded-full"></span>
+                        Conquistas Realizadas
+                    </h2>
+                    ${completedGoals.length === 0 ? `
+                        <div class="bg-background-card_light dark:bg-background-card_dark rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-700 shadow-sm opacity-60">
+                            <span class="text-4xl mb-4 block">🏆</span>
+                            <p class="text-text-secondary_light dark:text-text-secondary_dark text-sm">Suas metas concluídas aparecerão aqui.</p>
+                        </div>
+                    ` : `
+                        <div class="space-y-3">
+                            ${completedGoals.map(g => this.renderCompletedGoalCard(g)).join('')}
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    },
+
+    renderCompletedGoalCard(goal) {
+        return `
+            <div class="bg-white dark:bg-slate-800/50 rounded-2xl p-4 border border-accent-gold/30 relative overflow-hidden group">
+                 <div class="absolute inset-0 bg-accent-gold/5 pointer-events-none"></div>
+                 <div class="flex justify-between items-center relative z-10">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-accent-gold text-white flex items-center justify-center text-xl shadow-sm">
+                            ${goal.icon || '🏆'}
+                        </div>
+                        <div>
+                             <h3 class="font-bold text-text-primary_light dark:text-text-primary_dark leading-tight">${goal.name}</h3>
+                             <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark">Concluída em: ${new Date(goal.updated_at || new Date()).toLocaleDateString('pt-BR')}</p>
+                        </div>
                     </div>
-                ` : `
-                    <div class="space-y-3">
-                        ${savingsGoals.map(g => this.renderGoalCard(g)).join('')}
+                    <div class="text-right">
+                        <span class="text-sm font-bold text-accent-gold">R$ ${goal.target_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                     </div>
-                `}
+                 </div>
             </div>
         `;
     },

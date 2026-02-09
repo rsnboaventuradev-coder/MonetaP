@@ -20,6 +20,21 @@ export const EvolutionService = {
 
         // 1. Check Security Stage
         // User needs to have completed their Emergency Fund goal OR have enough liquidity
+
+        // 1a. Explicit Goal Check (Priority)
+        // 1a. Explicit Goal Check (Priority)
+        const completedEmergencyGoal = GoalsService.goals.find(g =>
+            (g.name.toLowerCase().includes('reserva') || g.type === 'security') &&
+            (g.status === 'completed' || (g.current_amount >= g.target_amount && g.target_amount > 0))
+        );
+
+        if (completedEmergencyGoal) {
+            console.log('✅ Evolution: Found Completed Emergency Goal override.', completedEmergencyGoal);
+            // User explicitly completed the goal, even if calculated liquidity varies
+            return this.STAGES.ACCUMULATION;
+        }
+
+        // 1b. Fallback: Calculated Liquidity Check
         const liquidityAmount = this.calculateLiquidity(profile);
         const costOfLiving = this.calculateAvgCostOfLiving();
         const monthsSecured = costOfLiving > 0 ? liquidityAmount / costOfLiving : 0;

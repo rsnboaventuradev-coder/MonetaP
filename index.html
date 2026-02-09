@@ -3,28 +3,58 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Moneta - Controle Financeiro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="./assets/css/style.css">
-    <link rel="stylesheet" href="/src/assets/css/safe-area.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="/manifest.json">
     <style>
+        /* Safe Area Utilities */
+        @supports (padding-top: env(safe-area-inset-top)) {
+            .safe-area-top {
+                padding-top: env(safe-area-inset-top);
+            }
+
+            .safe-area-bottom {
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+
+            .pb-safe {
+                padding-bottom: calc(env(safe-area-inset-bottom) + 1.5rem);
+            }
+
+            /* + base padding */
+            .pt-safe {
+                padding-top: env(safe-area-inset-top);
+            }
+        }
+
+        /* Fallbacks */
+        .pb-safe {
+            padding-bottom: 2rem;
+        }
+
         :root {
             /* LIGHT MODE (Executive Premium) */
-            --brand-bg: #F8F9FA;         /* background.light */
-            --brand-surface: #FFFFFF;    /* background.card_light */
-            --brand-surface-light: #F1F5F9; /* text.primary_dark (used as light surface/hover) */
-            --brand-text-primary: #1E293B;  /* text.primary_light */
-            --brand-text-secondary: #64748B; /* text.secondary_light */
-            --brand-border: #E2E8F0;     /* Slate-200 (kept for subtle borders) */
-            
+            --brand-bg: #F8F9FA;
+            /* background.light */
+            --brand-surface: #FFFFFF;
+            /* background.card_light */
+            --brand-surface-light: #F1F5F9;
+            /* text.primary_dark (used as light surface/hover) */
+            --brand-text-primary: #1E293B;
+            /* text.primary_light */
+            --brand-text-secondary: #64748B;
+            /* text.secondary_light */
+            --brand-border: #E2E8F0;
+            /* Slate-200 (kept for subtle borders) */
+
             /* Shadows for depth */
             --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            
+
             /* Status Colors mapped to vars for internal usage consistency */
             --color-success: #059669;
             --color-danger: #DC2626;
@@ -33,13 +63,19 @@
 
         .dark {
             /* DARK MODE (Executive Navy) */
-            --brand-bg: #0B1120;         /* background.dark */
-            --brand-surface: #151E32;    /* background.card_dark */
-            --brand-surface-light: #1E293B; /* text.primary_light (used as dark surface/hover) */
-            --brand-text-primary: #F1F5F9;  /* text.primary_dark */
-            --brand-text-secondary: #94A3B8; /* text.secondary_dark */
-            --brand-border: #1E293B;     /* Slate-800 */
-            
+            --brand-bg: #0B1120;
+            /* background.dark */
+            --brand-surface: #151E32;
+            /* background.card_dark */
+            --brand-surface-light: #1E293B;
+            /* text.primary_light (used as dark surface/hover) */
+            --brand-text-primary: #F1F5F9;
+            /* text.primary_dark */
+            --brand-text-secondary: #94A3B8;
+            /* text.secondary_dark */
+            --brand-border: #1E293B;
+            /* Slate-800 */
+
             --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         }
 
@@ -92,7 +128,7 @@
                             success: '#059669', // Emerald-600
                             danger: '#DC2626', // Red-600
                         },
-                        
+
                         // Legacy Mappings (soft deprecation or mapped to new)
                         'brand-green': '#059669', // Mapped to accent.success
                         'brand-gold': '#D97706',  // Mapped to accent.gold

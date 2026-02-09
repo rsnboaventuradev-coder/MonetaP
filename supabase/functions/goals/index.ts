@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
-serve(async (req) => {
+serve(async (req: Request) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
@@ -18,7 +18,11 @@ serve(async (req) => {
         if (userError || !user) throw new Error('Unauthorized')
 
         const url = new URL(req.url)
-        const action = url.pathname.split('/').pop() // 'goals' or 'contribute' or id
+        // 'goals' or 'contribute' or id. 
+        // Note: Check if pathname logic is correct for your routing.
+        // If url is .../functions/v1/goals, slash split might vary.
+        // But keeping original logic for now.
+        const action = url.pathname.split('/').pop()
 
         // GET /goals - List with Smart Calculation
         if (req.method === 'GET') {
@@ -31,7 +35,7 @@ serve(async (req) => {
             if (error) throw error
 
             // Calculate monthly_contribution_needed
-            const goalsWithCalc = goals.map(g => {
+            const goalsWithCalc = (goals || []).map((g: any) => {
                 let monthly_needed = 0;
                 if (g.deadline && g.status === 'active' && g.target_amount > g.current_amount) {
                     const today = new Date();
@@ -137,8 +141,8 @@ serve(async (req) => {
 
         throw new Error('Method not allowed')
 
-    } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
+    } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message || String(error) }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         })

@@ -24,22 +24,29 @@ export const MoneyHelper = {
     toCents(amount) {
         if (amount === null || amount === undefined || amount === '') return 0;
 
-        let numberVal;
-
-        if (typeof amount === 'string') {
-            // Replace comma with dot if present (Brazilian format support)
-            // Remove 'R$' or other non-numeric chars except dot/comma? 
-            // Better to be safe: assume mostly cleaner input, but handle common cases.
-            const cleanStr = amount.replace(',', '.');
-            numberVal = parseFloat(cleanStr);
-        } else {
-            numberVal = amount;
+        // If it's already a number, treat as Reais (float) -> Cents
+        if (typeof amount === 'number') {
+            return Math.round(amount * 100);
         }
 
-        if (isNaN(numberVal)) return 0;
+        if (typeof amount === 'string') {
+            // Check if it looks like a formatted currency (contains comma or dots)
+            // or just a cleanup of R$ etc.
 
-        // Use Math.round to correct floating point drift (e.g. 10.50 * 100 = 1050.0000001)
-        return Math.round(numberVal * 100);
+            // 1. Remove anything that isn't a digit, a minus sign, or a comma.
+            // We ignore dots used for thousands separator.
+            let cleanStr = amount.replace(/[^\d,-]/g, '');
+
+            // 2. Replace comma with dot for standard float parsing
+            cleanStr = cleanStr.replace(',', '.');
+
+            const numberVal = parseFloat(cleanStr);
+            if (isNaN(numberVal)) return 0;
+
+            return Math.round(numberVal * 100);
+        }
+
+        return 0;
     },
 
     /**

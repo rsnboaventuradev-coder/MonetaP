@@ -22,6 +22,14 @@ class App {
             user: null
         };
         this.currentView = null;
+
+        // Expose modules globally for interactions
+        this.InvestmentsModule = InvestmentsModule;
+        this.GoalsModule = GoalsModule;
+        this.WalletModule = WalletModule;
+        this.ReportsModule = ReportsModule;
+        this.SettingsModule = SettingsModule;
+        this.DashboardModule = DashboardModule;
     }
 
     initTheme() {
@@ -148,7 +156,7 @@ class App {
         window.app.currentView = viewName;
 
         // Render Bottom Nav with hidden tabs filtering
-        if (this.state.user && ['dashboard', 'wallet', 'goals', 'investments', 'settings'].includes(viewName)) {
+        if (this.state.user && ['dashboard', 'wallet', 'goals', 'investments', 'reports', 'settings'].includes(viewName)) {
             await this.renderNavigation();
         }
 

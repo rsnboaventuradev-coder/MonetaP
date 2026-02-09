@@ -305,14 +305,12 @@ export const TransactionService = {
         return newTx;
     },
 
-    async createInstallments(data) {
-        const { installmentsCount, ...transaction } = data;
+    async createInstallments(transaction) {
+        const { installmentsCount, installmentDay } = transaction;
+        const totalAmountCents = MoneyHelper.toCents(transaction.amount);
 
-        // Input is likely Reais (from UI). Convert to Cents first.
-        const totalCents = MoneyHelper.toCents(transaction.amount);
-
-        const installmentCents = Math.floor(totalCents / installmentsCount);
-        const remainderCents = totalCents % installmentsCount;
+        const installmentCents = Math.floor(totalAmountCents / installmentsCount);
+        const remainderCents = totalAmountCents % installmentsCount;
 
         const session = await SupabaseService.getSession();
         const user = session?.user;
@@ -332,43 +330,42 @@ export const TransactionService = {
         const promises = [];
 
         for (let i = 0; i < installmentsCount; i++) {
-            // Calculate Amount for this installment
-            // Add remainder to the first installment (or last). Usually first is better for immediate payment.
+            // Calculate Amount
             let currentAmountCents = installmentCents;
-            if (i === 0) {
-                currentAmountCents += remainderCents;
-            }
+            if (i === 0) currentAmountCents += remainderCents;
 
             // Calculate Date
-            const date = new Date(baseDate);
-            date.setMonth(baseDate.getMonth() + i);
+            let date;
+            if (i === 0) {
+                date = new Date(baseDate);
+            } else {
+                // Future months: Start from 1st to avoid overflow (e.g. Jan 31 -> Feb 28)
+                const year = baseDate.getFullYear();
+                const month = baseDate.getMonth();
+                date = new Date(year, month + i, 1);
 
-            // Handle edge case: Jan 31 + 1 month -> Feb 28/29 (Javascript handles this automatically by rolling over to Mar usually? No, setMonth tries to stay on day but rolls over if not exist)
-            // e.g. 31 Jan -> setMonth(1) -> 31 Feb (Does not exist) -> 3 March.
-            // Usually for credit card installments, if I buy on 31st, next bill is 28th? Or stays on billing cycle?
-            // For simplicity, JS default behavior is acceptable or we can stick to "Day 1" if we wanted to be strict, but keeping purchase day is better.
-            // Let's trust JS `setMonth` behaviors for now as standard "Next Month" logic.
+                // Determine target day (User preference OR original day)
+                const targetDay = installmentDay || baseDate.getDate();
 
-            const currentAmountFloat = currentAmountCents / 100;
+                // Clamp to last day of target month
+                const lastDayOfMonth = new Date(year, month + i + 1, 0).getDate();
+                date.setDate(Math.min(targetDay, lastDayOfMonth));
+            }
 
             const newTx = {
                 ...transaction,
                 description: `${transaction.description} (${i + 1}/${installmentsCount})`,
                 amount: currentAmountCents,
-                amountIsCents: true, // Flag to tell create() values are already correct
+                amountIsCents: true,
                 date: date.toISOString(),
-                status: (i === 0 && transaction.status === 'paid') ? 'paid' : 'pending' // Only first is paid? Or all? Usually installments are "Future" so pending. User can change. 
-                // If I pay with Credit Card, effectively I "spent" it, but the bill comes later.
-                // If I put "paid", it deducts from balance immediately.
-                // Installments usually imply FUTURE payments.
-                // Let's set first as 'paid' if the user said so (default 'paid'), others as 'pending'?
-                // Or if it IS a credit card purchase, maybe it's "paid" regarding the store, but simple expense tracking...
-                // Let's keep the status passed by user (usually 'paid') for ALL if user marked as paid?
-                // No, future installments are by definition NOT paid yet (cash flow wise).
-                // Let's set i=0 as passed status, i>0 as 'pending' (scheduled).
+                status: (i === 0 && transaction.status === 'paid') ? 'paid' : 'pending'
             };
 
-            // Force pending for future
+            // Clean props
+            delete newTx.installmentsCount;
+            delete newTx.installmentDay;
+
+            // Future installments are always pending
             if (i > 0) newTx.status = 'pending';
 
             promises.push(this.create(newTx));
@@ -394,6 +391,7 @@ export const TransactionService = {
             type: transaction.type, // 'income' or 'expense'
             category: transaction.categoryId || transaction.category_id || null,
             active: true,
+            context: transaction.context || 'personal',
             created_at: new Date().toISOString()
         };
 
