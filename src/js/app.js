@@ -214,7 +214,7 @@ class App {
         try {
             const session = await SupabaseService.getSession();
             const user = session?.user;
-            console.log('📱 renderNavigation - User:', user?.id);
+            // console.log('📱 renderNavigation - User:', user?.id);
             if (user) {
                 // Use limit(1) to handle potential duplicate rows in user_profiles
                 const { data: profiles, error } = await SupabaseService.client
@@ -224,9 +224,9 @@ class App {
                     .limit(1);
 
                 const profile = profiles?.[0] || null;
-                console.log('📱 renderNavigation - Profile data:', profile, 'Error:', error);
+                // console.log('📱 renderNavigation - Profile data:', profile, 'Error:', error);
                 hiddenTabs = profile?.hidden_tabs || [];
-                console.log('📱 renderNavigation - Hidden tabs:', hiddenTabs);
+                // console.log('📱 renderNavigation - Hidden tabs:', hiddenTabs);
             }
         } catch (error) {
             console.error('Error fetching hidden tabs:', error);

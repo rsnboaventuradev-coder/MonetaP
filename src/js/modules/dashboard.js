@@ -151,7 +151,7 @@ export const DashboardModule = {
         const summaryStats = TransactionService.getFinancialStatement(currentMonth, currentYear, this.currentContext === 'all' ? undefined : this.currentContext);
 
         // 5. RECENT TRANSACTIONS
-        const recentTransactions = TransactionService.transactions
+        const recentTransactions = (TransactionService.transactions || [])
             .sort((a, b) => new Date(b.date) - new Date(a.date))
             .slice(0, 5);
 
@@ -324,7 +324,11 @@ export const DashboardModule = {
             // --- CASH FLOW CHART ---
             const flowCtx = document.getElementById('cash-flow-chart');
             if (flowCtx) {
-                const evolutionData = await ReportsService.getEvolution(6);
+                if (this.chartInstances.cashFlow) {
+                    this.chartInstances.cashFlow.destroy();
+                }
+
+                const evolutionData = await ReportsService.getEvolution(6) || [];
 
                 this.chartInstances.cashFlow = new Chart(flowCtx, {
                     type: 'bar',
@@ -392,7 +396,11 @@ export const DashboardModule = {
             // --- EXPENSES BREAKDOWN CHART ---
             const expenseCtx = document.getElementById('expenses-chart');
             if (expenseCtx) {
-                let breakdownData = await ReportsService.getBreakdown('expense', month + 1, year);
+                if (this.chartInstances.expenses) {
+                    this.chartInstances.expenses.destroy();
+                }
+
+                let breakdownData = await ReportsService.getBreakdown('expense', month + 1, year) || [];
 
                 // Grouping Logic: Top 5 + Others
                 if (breakdownData.length > 5) {

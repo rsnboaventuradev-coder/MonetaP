@@ -193,7 +193,7 @@ export const AuthModule = {
                     }
 
                 } catch (error) {
-                    console.error(error);
+                    console.warn(error); // Warn instead of Error for expected auth failures
                     this.showMessage(error.message, 'error');
 
                     // Specific error handling logic
