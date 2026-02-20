@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -81,7 +81,7 @@ serve(async (req) => {
         { name: 'Serviços', icon: 'briefcase', type: 'INCOME', context: 'business' }
       ]
 
-      let targetCategories = [];
+      let targetCategories: any[] = [];
 
       if (type === 'PF') {
         targetCategories = categoriesPF;
@@ -172,7 +172,7 @@ serve(async (req) => {
 
     return new Response('Not Found', { status: 404, headers: corsHeaders })
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

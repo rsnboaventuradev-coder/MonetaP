@@ -6,6 +6,8 @@ import { HapticService } from '../services/haptics.service.js';
 import { Toast } from '../utils/toast.js';
 import { CategoryBudgetService } from '../services/category_budgets.service.js';
 import { CreditCardService } from '../services/credit-card.service.js';
+import { Money } from '../utils/money.js';
+import { createElement, clearElement } from '../utils/dom.js';
 import Chart from 'chart.js/auto';
 
 export const WalletModule = {
@@ -639,124 +641,75 @@ export const WalletModule = {
     `).join('');
     },
 
+
     renderTransactionsList(transactionsOverride = null) {
         // Null Check
         if (!this.dom.list) return;
 
         const transactions = transactionsOverride || this.state.transactions;
 
+        // Clear existing content safely
+        this.dom.list.innerHTML = '';
+
         if (transactions.length === 0) {
-            this.dom.list.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-12 text-center animate-fade-in-up">
-                    <div class="w-24 h-24 bg-brand-surface-light rounded-full flex items-center justify-center mb-6">
-                         <span class="text-4xl">💸</span>
-                    </div>
-                    <h3 class="text-xl font-bold text-brand-text-primary mb-2">Nada por aqui... ainda!</h3>
-                    <p class="text-brand-text-secondary max-w-[250px] mb-6">Suas transações aparecerão aqui. Que tal começar agora?</p>
-                    <button onclick="window.app.navigateTo('wallet'); document.querySelector('#wallet-add-btn')?.click()" class="px-6 py-3 bg-brand-gold text-brand-text-primary rounded-xl font-bold hover:bg-brand-gold-light transition shadow-glow-gold">
-                        Registrar Transação
-                    </button>
-                </div>
-            `;
+            const emptyState = createElement('div', { className: 'flex flex-col items-center justify-center py-12 text-center animate-fade-in-up' }, [
+                createElement('div', { className: 'w-24 h-24 bg-brand-surface-light rounded-full flex items-center justify-center mb-6' },
+                    createElement('span', { className: 'text-4xl' }, '💸')
+                ),
+                createElement('h3', { className: 'text-xl font-bold text-brand-text-primary mb-2' }, 'Nada por aqui... ainda!'),
+                createElement('p', { className: 'text-brand-text-secondary max-w-[250px] mb-6' }, 'Suas transações aparecerão aqui. Que tal começar agora?'),
+                createElement('button', {
+                    className: 'px-6 py-3 bg-brand-gold text-brand-text-primary rounded-xl font-bold hover:bg-brand-gold-light transition shadow-glow-gold',
+                    onclick: () => { window.app.navigateTo('wallet'); document.querySelector('#wallet-add-btn')?.click(); }
+                }, 'Registrar Transação')
+            ]);
+            this.dom.list.appendChild(emptyState);
             return;
         }
 
         // Group by Date
         const grouped = this.groupByDate(transactions);
 
-        this.dom.list.innerHTML = `
-            <!-- MOBILE VIEW (CARDS) -->
-            <div class="md:hidden space-y-6">
-                ${Object.entries(grouped).map(([date, items]) => `
-                    <div class="animate-fade-in-up">
-                        <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10">${this.formatDateHeader(date)}</h3>
-                        <div class="bg-brand-surface shadow-card-sm border border-brand-border rounded-2xl overflow-hidden">
-                            ${items.map(t => this.renderTransactionItem(t)).join('')}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
+        // --- MOBILE VIEW (CARDS) ---
+        const mobileContainer = createElement('div', { className: 'md:hidden space-y-6' });
 
-            <!-- DESKTOP VIEW (TABLE) -->
-            <div class="hidden md:block bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-sm animate-fade-in">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="border-b border-brand-border bg-brand-surface-light/50">
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Data</th>
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Categoria / Descrição</th>
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Conta</th>
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider">Status</th>
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right">Valor</th>
-                            <th class="p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-brand-border">
-                        ${transactions.map(t => {
-            const isExpense = t.type === 'expense';
-            const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
-            const sign = isExpense ? '-' : '+';
-            // Date formatting
-            const dateObj = new Date(t.date);
-            const day = dateObj.getDate().toString().padStart(2, '0');
-            const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-            const year = dateObj.getFullYear();
+        Object.entries(grouped).forEach(([date, items]) => {
+            const group = createElement('div', { className: 'animate-fade-in-up' }, [
+                createElement('h3', { className: 'text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 ml-1 sticky top-0 bg-brand-bg/95 backdrop-blur py-2 z-10' }, this.formatDateHeader(date)),
+                createElement('div', { className: 'bg-brand-surface shadow-card-sm border border-brand-border rounded-2xl overflow-hidden' },
+                    items.map(t => this.createTransactionCard(t))
+                )
+            ]);
+            mobileContainer.appendChild(group);
+        });
 
-            // Category Icon
-            const categoryColor = t.categories?.color || '#6c757d';
-            const categoryIcon = t.categories?.icon || 'fa-tag';
-            const iconDisplay = categoryIcon.includes('fa-') ? `<i class="fas ${categoryIcon}"></i>` : categoryIcon;
+        this.dom.list.appendChild(mobileContainer);
 
-            return `
-                                <tr class="hover:bg-brand-surface-light/50 transition duration-150 group">
-                                    <td class="p-4 text-sm text-brand-text-secondary font-medium whitespace-nowrap">
-                                        ${day}/${month}/${year}
-                                    </td>
-                                    <td class="p-4">
-                                        <div class="flex items-center gap-3">
-                                            <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-lg" style="background-color: ${categoryColor}20; color: ${categoryColor};">
-                                                ${iconDisplay}
-                                            </div>
-                                            <div>
-                                                <p class="text-sm font-bold text-brand-text-primary text-ellipsis overflow-hidden">${t.description}</p>
-                                                <p class="text-xs text-brand-text-secondary">${t.categories?.name || 'Geral'}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="p-4">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-xs font-bold px-2 py-1 rounded bg-brand-bg border border-brand-border text-brand-text-secondary">
-                                                ${t.accounts?.name || 'Conta'}
-                                            </span>
-                                            ${t.context === 'business' ? '<span class="text-[9px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded border border-purple-500/20 font-bold">PJ</span>' : ''}
-                                        </div>
-                                    </td>
-                                    <td class="p-4">
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.status === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}">
-                                            ${t.status === 'paid' ? 'Pago' : 'Pendente'}
-                                        </span>
-                                    </td>
-                                    <td class="p-4 text-right">
-                                        <span class="text-sm font-bold ${colorClass} value-sensitive tabular-nums">
-                                            ${sign} ${this.formatCurrency(t.amount / 100)}
-                                        </span>
-                                    </td>
-                                    <td class="p-4 text-right">
-                                        <div class="flex items-center justify-end gap-2 opacity-100 group-hover:opacity-100 transition-opacity">
-                                            <button onclick="window.app.WalletModule.openEdit('${t.id}')" class="p-2 text-brand-text-secondary hover:text-brand-text-primary hover:bg-brand-bg rounded-lg transition" title="Editar">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                                            </button>
-                                            <button onclick="window.app.WalletModule.askDelete('${t.id}')" class="p-2 text-brand-text-secondary hover:text-red-500 hover:bg-red-50/10 rounded-lg transition" title="Excluir">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
+        // --- DESKTOP VIEW (TABLE) ---
+        const desktopContainer = createElement('div', { className: 'hidden md:block bg-brand-surface border border-brand-border rounded-2xl overflow-hidden shadow-sm animate-fade-in' });
+
+        const table = createElement('table', { className: 'w-full text-left border-collapse' });
+
+        const thead = createElement('thead', {}, [
+            createElement('tr', { className: 'border-b border-brand-border bg-brand-surface-light/50' }, [
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider' }, 'Data'),
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider' }, 'Categoria / Descrição'),
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider' }, 'Conta'),
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider' }, 'Status'),
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right' }, 'Valor'),
+                createElement('th', { className: 'p-4 py-5 text-xs font-bold text-brand-text-secondary uppercase tracking-wider text-right' }, 'Ações')
+            ])
+        ]);
+
+        const tbody = createElement('tbody', { className: 'divide-y divide-brand-border' },
+            transactions.map(t => this.createTransactionRow(t))
+        );
+
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        desktopContainer.appendChild(table);
+
+        this.dom.list.appendChild(desktopContainer);
     },
 
     updateBalanceDisplay() {
@@ -765,58 +718,140 @@ export const WalletModule = {
             const val = parseInt(t.amount || 0);
             return t.type === 'income' ? acc + val : acc - val;
         }, 0);
-        this.dom.totalBalance.textContent = this.formatCurrency(total / 100);
+        this.dom.totalBalance.textContent = Money.format(total, true);
     },
 
-    renderTransactionItem(t) {
+    createTransactionRow(t) {
+        const isExpense = t.type === 'expense';
+        const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
+        const sign = isExpense ? '-' : '+';
+
+        // Date formatting
+        const dateObj = new Date(t.date);
+        const day = dateObj.getDate().toString().padStart(2, '0');
+        const month = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+        const year = dateObj.getFullYear();
+
+        // Category Icon
+        const categoryColor = t.categories?.color || '#6c757d';
+        const categoryIcon = t.categories?.icon || 'fa-tag';
+        const iconElement = this.createIconElement(categoryIcon); // Helper needed or inline
+
+        // Create Row
+        return createElement('tr', { className: 'hover:bg-brand-surface-light/50 transition duration-150 group' }, [
+            createElement('td', { className: 'p-4 text-sm text-brand-text-secondary font-medium whitespace-nowrap' }, `${day}/${month}/${year}`),
+            createElement('td', { className: 'p-4' },
+                createElement('div', { className: 'flex items-center gap-3' }, [
+                    createElement('div', {
+                        className: 'w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-lg',
+                        style: `background-color: ${categoryColor}20; color: ${categoryColor};`
+                    }, [iconElement]),
+                    createElement('div', {}, [
+                        createElement('p', { className: 'text-sm font-bold text-brand-text-primary text-ellipsis overflow-hidden' }, t.description),
+                        createElement('p', { className: 'text-xs text-brand-text-secondary' }, t.categories?.name || 'Geral')
+                    ])
+                ])
+            ),
+            createElement('td', { className: 'p-4' },
+                createElement('div', { className: 'flex items-center gap-2' }, [
+                    createElement('span', { className: 'text-xs font-bold px-2 py-1 rounded bg-brand-bg border border-brand-border text-brand-text-secondary' }, t.accounts?.name || 'Conta'),
+                    t.context === 'business' ? createElement('span', { className: 'text-[9px] bg-purple-500/10 text-purple-500 px-1.5 py-0.5 rounded border border-purple-500/20 font-bold' }, 'PJ') : null
+                ])
+            ),
+            createElement('td', { className: 'p-4' },
+                createElement('span', { className: `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.status === 'paid' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'}` },
+                    t.status === 'paid' ? 'Pago' : 'Pendente'
+                )
+            ),
+            createElement('td', { className: 'p-4 text-right' },
+                createElement('span', { className: `text-sm font-bold ${colorClass} value-sensitive tabular-nums` },
+                    `${sign} ${Money.format(t.amount, true)}`
+                )
+            ),
+            createElement('td', { className: 'p-4 text-right' },
+                createElement('div', { className: 'flex items-center justify-end gap-2 opacity-100 group-hover:opacity-100 transition-opacity' }, [
+                    createElement('button', {
+                        className: 'p-2 text-brand-text-secondary hover:text-brand-text-primary hover:bg-brand-bg rounded-lg transition',
+                        title: 'Editar',
+                        onclick: () => window.app.WalletModule.openEdit(t.id)
+                    }, [
+                        createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', className: 'h-4 w-4', fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                            createElement('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' })
+                        )
+                    ]),
+                    createElement('button', {
+                        className: 'p-2 text-brand-text-secondary hover:text-red-500 hover:bg-red-50/10 rounded-lg transition',
+                        title: 'Excluir',
+                        onclick: () => window.app.WalletModule.askDelete(t.id)
+                    }, [
+                        createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', className: 'h-4 w-4', fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                            createElement('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
+                        )
+                    ])
+                ])
+            )
+        ]);
+    },
+
+    createTransactionCard(t) {
         const isExpense = t.type === 'expense';
         const colorClass = isExpense ? 'text-brand-red' : 'text-brand-green';
         const sign = isExpense ? '-' : '+';
         const categoryColor = t.categories?.color || '#6c757d';
         const categoryIcon = t.categories?.icon || 'fa-tag';
+        const iconElement = this.createIconElement(categoryIcon);
 
-        // Verifica se é ícone do FontAwesome ou Emoji
-        const iconDisplay = categoryIcon.includes('fa-')
-            ? `<i class="fas ${categoryIcon}"></i>`
-            : categoryIcon;
+        return createElement('div', { className: 'flex items-center p-4 border-b border-brand-border last:border-0 hover:bg-brand-surface-light transition group' }, [
+            // Icon
+            createElement('div', {
+                className: 'w-10 h-10 rounded-full flex items-center justify-center mr-4 shrink-0',
+                style: `background-color: ${categoryColor}20; color: ${categoryColor};`
+            }, [
+                createElement('span', { className: 'text-lg' }, [iconElement])
+            ]),
 
-        return `
-            <div class="flex items-center p-4 border-b border-brand-border last:border-0 hover:bg-brand-surface-light transition group">
-                <!--Icon -->
-                <div class="w-10 h-10 rounded-full flex items-center justify-center mr-4 shrink-0" 
-                     style="background-color: ${categoryColor}20; color: ${categoryColor};">
-                    <span class="text-lg">${iconDisplay}</span>
-                </div>
-                
-                <!--Text(Click to Edit) -->
-                <div class="flex-grow min-w-0 cursor-pointer" onclick="window.app.WalletModule.openEdit('${t.id}')">
-                    <div class="flex items-center gap-2 mb-1">
-                        <h4 class="text-sm font-bold text-brand-text-primary truncate">${t.description}</h4>
-                        ${t.context === 'business' ? '<span class="text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-bold">PJ</span>' : ''}
-                    </div>
-                    <p class="text-xs text-brand-text-secondary truncate">
-                        ${t.categories?.name || 'Geral'} 
-                        ${t.payment_method ? `• ${this.formatPaymentMethod(t.payment_method)}` : ''}
-                    </p>
-                </div>
+            // Text (Click to Edit)
+            createElement('div', {
+                className: 'flex-grow min-w-0 cursor-pointer',
+                onclick: () => window.app.WalletModule.openEdit(t.id)
+            }, [
+                createElement('div', { className: 'flex items-center gap-2 mb-1' }, [
+                    createElement('h4', { className: 'text-sm font-bold text-brand-text-primary truncate' }, t.description),
+                    t.context === 'business' ? createElement('span', { className: 'text-[9px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded-full font-bold' }, 'PJ') : null
+                ]),
+                createElement('p', { className: 'text-xs text-brand-text-secondary truncate' }, [
+                    t.categories?.name || 'Geral',
+                    t.payment_method ? ` • ${this.formatPaymentMethod(t.payment_method)}` : ''
+                ])
+            ]),
 
-                <!--Value -->
-                <div class="text-right ml-4 shrink-0">
-                    <div class="font-bold text-sm ${colorClass} value-sensitive">
-                        ${sign} ${this.formatCurrency(t.amount / 100)}
-                    </div>
-                </div>
+            // Value
+            createElement('div', { className: 'text-right ml-4 shrink-0' }, [
+                createElement('div', { className: `font-bold text-sm ${colorClass} value-sensitive` },
+                    `${sign} ${Money.format(t.amount, true)}`
+                )
+            ]),
 
-                <!--Actions(Visible on Hover / Swipe) -->
-                <div class="ml-4 flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button class="btn-delete p-2 text-brand-text-secondary hover:text-red-500 transition" data-id="${t.id}" onclick="event.stopPropagation(); window.app.WalletModule.askDelete('${t.id}')">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
+            // Actions (Visible on Hover / Swipe)
+            createElement('div', { className: 'ml-4 flex items-center gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity' }, [
+                createElement('button', {
+                    className: 'btn-delete p-2 text-brand-text-secondary hover:text-red-500 transition',
+                    'data-id': t.id,
+                    onclick: (e) => { e.stopPropagation(); window.app.WalletModule.askDelete(t.id); }
+                }, [
+                    createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', className: 'h-4 w-4', fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor' },
+                        createElement('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })
+                    )
+                ])
+            ])
+        ]);
+    },
+
+    createIconElement(icon) {
+        if (icon.includes('fa-')) {
+            return createElement('i', { className: `fas ${icon}` });
+        }
+        return document.createTextNode(icon);
     },
 
     // --- Lógica de Formulário e Ações ---
@@ -1127,9 +1162,10 @@ export const WalletModule = {
         // Save current selection to restore if valid
         const currentVal = this.dom.categorySelect.value;
         const currentTxCategoryId = this.dom.form.dataset.id ? this.dom.form.querySelector('[name="categoryId"]')?.value : null;
-        // Note: dom.categorySelect.value might be empty if init. We rely on internal restore logic or currentVal if already selected.
 
-        this.dom.categorySelect.innerHTML = '<option value="" disabled selected>Selecione...</option>';
+        // Clear and add default option
+        this.dom.categorySelect.innerHTML = '';
+        this.dom.categorySelect.appendChild(createElement('option', { value: '', disabled: true, selected: true }, 'Selecione...'));
 
         let categoriesToRender = this.state.categories;
 
@@ -1186,9 +1222,6 @@ export const WalletModule = {
 
         // Render Options
         categoriesToRender.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-
             // Map standard icon names to Emojis for the Select dropdown (since it can't render SVGs)
             let emoji = '';
             const iconName = cat.icon ? cat.icon.toLowerCase() : '';
@@ -1223,8 +1256,8 @@ export const WalletModule = {
                 emoji = cat.icon;
             }
 
-            option.text = emoji ? `${emoji} ${cat.name}` : cat.name;
-            this.dom.categorySelect.appendChild(option);
+            const label = emoji ? `${emoji} ${cat.name}` : cat.name;
+            this.dom.categorySelect.appendChild(createElement('option', { value: cat.id }, label));
         });
 
         // Restore selection if it still exists in the filtered list
@@ -1235,11 +1268,9 @@ export const WalletModule = {
             // we should probably fetch it from full list and append it so it's valid?
             const missingCat = this.state.categories.find(c => c.id == currentVal);
             if (missingCat) {
-                const option = document.createElement('option');
-                option.value = missingCat.id;
                 const icon = (missingCat.icon && missingCat.icon.includes('fa-')) ? '' : (missingCat.icon || '');
-                option.text = `${icon} ${missingCat.name} (Antigo)`;
-                this.dom.categorySelect.appendChild(option);
+                const label = `${icon} ${missingCat.name} (Antigo)`;
+                this.dom.categorySelect.appendChild(createElement('option', { value: missingCat.id }, label));
                 this.dom.categorySelect.value = currentVal;
             } else {
                 this.dom.categorySelect.value = "";
@@ -1253,22 +1284,22 @@ export const WalletModule = {
         // We'll verify if the 'manage-cats-btn' exists next to the select. If not, create it.
         const parent = this.dom.categorySelect.parentElement;
         if (parent && !parent.querySelector('#manage-cats-btn')) {
-            const btn = document.createElement('button');
-            btn.id = 'manage-cats-btn';
-            btn.type = 'button'; // Prevent form submit
-            btn.className = 'text-xs text-brand-gold font-bold uppercase mt-2 hover:underline flex items-center gap-1';
-            btn.innerHTML = `
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                Gerenciar Categorias
-            `;
-            btn.onclick = () => {
-                // Close modal and go to settings? Or open settings modal?
-                // Ideally preserve state? For now, navigate.
-                if (confirm('Deseja ir para Configurações gerenciar as categorias? Os dados não salvos desta transação serão perdidos.')) {
-                    window.app.WalletModule.closeTransactionModal();
-                    window.app.navigateTo('settings');
+            const btn = createElement('button', {
+                id: 'manage-cats-btn',
+                type: 'button',
+                className: 'text-xs text-brand-gold font-bold uppercase mt-2 hover:underline flex items-center gap-1',
+                onclick: () => {
+                    // Close modal and go to settings? Or open settings modal?
+                    // Ideally preserve state? For now, navigate.
+                    if (confirm('Deseja ir para Configurações gerenciar as categorias? Os dados não salvos desta transação serão perdidos.')) {
+                        window.app.WalletModule.closeTransactionModal();
+                        window.app.navigateTo('settings');
+                    }
                 }
-            };
+            }, [
+                createElement('i', { className: 'fas fa-cog' }),
+                ' Gerenciar Categorias'
+            ]);
             parent.appendChild(btn);
         }
     },
@@ -1280,7 +1311,12 @@ export const WalletModule = {
         }
 
         if (this.dom.loadMoreBtn) {
-            this.dom.loadMoreBtn.innerHTML = isLoading ? '<i class="fas fa-spinner fa-spin"></i>' : 'Carregar Mais';
+            this.dom.loadMoreBtn.innerHTML = '';
+            if (isLoading) {
+                this.dom.loadMoreBtn.appendChild(createElement('i', { className: 'fas fa-spinner fa-spin' }));
+            } else {
+                this.dom.loadMoreBtn.textContent = 'Carregar Mais';
+            }
             this.dom.loadMoreBtn.disabled = isLoading;
         }
     },
@@ -1319,13 +1355,12 @@ export const WalletModule = {
         const list = document.getElementById('walletTransactionsList');
         if (!list) return;
 
-        // Skeleton
-        list.innerHTML = `
-            <div class="animate-pulse space-y-3">
-                <div class="h-20 bg-brand-surface-light rounded-2xl w-full"></div>
-                <div class="h-20 bg-brand-surface-light rounded-2xl w-full"></div>
-            </div>
-        `;
+        // Clear existing content
+        list.innerHTML = '';
+        list.appendChild(createElement('div', { className: 'animate-pulse space-y-3' }, [
+            createElement('div', { className: 'h-20 bg-brand-surface-light rounded-2xl w-full' }),
+            createElement('div', { className: 'h-20 bg-brand-surface-light rounded-2xl w-full' })
+        ]));
 
         const recurring = await TransactionService.getRecurringDefinitions();
         const totalRecurring = recurring.reduce((acc, r) => acc + Number(r.amount), 0);
@@ -1333,173 +1368,176 @@ export const WalletModule = {
         // Get Income for context (Committed Income)
         const currentMonth = new Date().getMonth();
         const currentYear = new Date().getFullYear();
-        const stats = await TransactionService.getFinancialStatement(currentMonth, currentYear); // Added await if needed, but getFinancialStatement seems presumably async or not? Checked: it's likely async in Service but let's check assumptions. 
-        // Actually, TransactionService.getFinancialStatement might be local calculation if syncing? 
-        // Let's assume it returns a promise or value. If promise, we need await. 
-        // View 2647 line 1002 didn't have await. I will stick to original.
+        const stats = await TransactionService.getFinancialStatement(currentMonth, currentYear);
 
         const income = (stats && stats.revenue) ? stats.revenue : 1; // avoid div by zero
         const committedPercent = Math.min((totalRecurring / income) * 100, 100).toFixed(1);
 
-        let html = `
-            <!-- Committed Income Widget -->
-            <div class="bg-brand-surface-light p-6 rounded-2xl border border-brand-border mb-6">
-                <div class="flex justify-between items-end mb-2">
-                    <div>
-                        <p class="text-xs text-brand-text-secondary uppercase tracking-widest font-bold">Custo Fixo Mensal</p>
-                        <h3 class="text-2xl font-black text-brand-text-primary value-sensitive">R$ ${(totalRecurring / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h3>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-xs text-${committedPercent > 50 ? 'brand-red' : 'brand-green'} font-bold">${committedPercent}% da Renda</p>
-                    </div>
-                </div>
-                <div class="h-2 bg-brand-surface-light rounded-full overflow-hidden">
-                    <div class="h-full bg-${committedPercent > 50 ? 'brand-red' : 'brand-green'} transition-all duration-1000" style="width: ${committedPercent}%"></div>
-                </div>
-                <p class="text-[10px] text-brand-text-secondary mt-2">Valor comprometido antes mesmo do mês começar.</p>
-            </div>
+        // Clear skeleton
+        list.innerHTML = '';
 
-            <!-- Credit Cards Section -->
-            ${await this.renderCreditCardsSection()}
+        // Committed Income Widget
+        const widget = createElement('div', { className: 'bg-brand-surface-light p-6 rounded-2xl border border-brand-border mb-6' }, [
+            createElement('div', { className: 'flex justify-between items-end mb-2' }, [
+                createElement('div', {}, [
+                    createElement('p', { className: 'text-xs text-brand-text-secondary uppercase tracking-widest font-bold' }, 'Custo Fixo Mensal'),
+                    createElement('h3', { className: 'text-2xl font-black text-brand-text-primary value-sensitive' }, Money.format(totalRecurring, true))
+                ]),
+                createElement('div', { className: 'text-right' }, [
+                    createElement('p', { className: `text-xs text-${committedPercent > 50 ? 'brand-red' : 'brand-green'} font-bold` }, `${committedPercent}% da Renda`)
+                ])
+            ]),
+            createElement('div', { className: 'h-2 bg-brand-surface-light rounded-full overflow-hidden' }, [
+                createElement('div', {
+                    className: `h-full bg-${committedPercent > 50 ? 'brand-red' : 'brand-green'} transition-all duration-1000`,
+                    style: `width: ${committedPercent}%`
+                })
+            ]),
+            createElement('p', { className: 'text-[10px] text-brand-text-secondary mt-2' }, 'Valor comprometido antes mesmo do mês começar.')
+        ]);
+        list.appendChild(widget);
 
-            <h3 class="text-sm font-bold text-brand-text-secondary uppercase mb-4 px-2">Assinaturas Ativas</h3>
-            <div class="space-y-3">
-        `;
+        // Credit Cards Section
+        const creditCardsSection = await this.renderCreditCardsSection();
+        list.appendChild(creditCardsSection);
+
+        // Active Subscriptions
+        list.appendChild(createElement('h3', { className: 'text-sm font-bold text-brand-text-secondary uppercase mb-4 px-2' }, 'Assinaturas Ativas'));
+
+        const subList = createElement('div', { className: 'space-y-3' });
 
         if (recurring.length === 0) {
-            html += `
-                <div class="text-center py-12">
-                    <div class="w-16 h-16 bg-brand-surface-light rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🔄</div>
-                    <p class="text-brand-text-secondary text-sm">Nenhuma assinatura ou conta fixa cadastrada.</p>
-                    <p class="text-gray-600 text-xs mt-2">Adicione uma transação e marque "Repetir Mensalmente".</p>
-                </div>
-            `;
+            subList.appendChild(createElement('div', { className: 'text-center py-12' }, [
+                createElement('div', { className: 'w-16 h-16 bg-brand-surface-light rounded-full flex items-center justify-center mx-auto mb-4 text-3xl' }, '🔄'),
+                createElement('p', { className: 'text-brand-text-secondary text-sm' }, 'Nenhuma assinatura ou conta fixa cadastrada.'),
+                createElement('p', { className: 'text-gray-600 text-xs mt-2' }, 'Adicione uma transação e marque "Repetir Mensalmente".')
+            ]));
         } else {
-            html += recurring.map(r => `
-                <div class="bg-brand-surface-light p-4 rounded-2xl border border-brand-border flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs uppercase">
-                            ${r.description ? r.description.substring(0, 2) : '??'}
-                        </div>
-                        <div>
-                            <h4 class="font-bold text-brand-text-primary text-sm">${r.description}</h4>
-                            <p class="text-xs text-brand-text-secondary">Todo dia ${r.day_of_month}</p>
-                        </div>
-                    </div>
-                    <div class="font-bold text-brand-text-primary value-sensitive">
-                        R$ ${(r.amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                </div>
-            `).join('');
+            recurring.forEach(r => {
+                subList.appendChild(createElement('div', { className: 'bg-brand-surface-light p-4 rounded-2xl border border-brand-border flex items-center justify-between' }, [
+                    createElement('div', { className: 'flex items-center gap-4' }, [
+                        createElement('div', { className: 'w-10 h-10 rounded-full bg-brand-gold/20 flex items-center justify-center text-brand-gold font-bold text-xs uppercase' },
+                            r.description ? r.description.substring(0, 2) : '??'
+                        ),
+                        createElement('div', {}, [
+                            createElement('h4', { className: 'font-bold text-brand-text-primary text-sm' }, r.description),
+                            createElement('p', { className: 'text-xs text-brand-text-secondary' }, `Todo dia ${r.day_of_month}`)
+                        ])
+                    ]),
+                    createElement('div', { className: 'font-bold text-brand-text-primary value-sensitive' }, Money.format(r.amount, true))
+                ]));
+            });
         }
-
-        html += '</div>';
-        list.innerHTML = html;
+        list.appendChild(subList);
     },
 
     async renderCreditCardsSection() {
         await CreditCardService.init();
         const cards = CreditCardService.cards;
+        const container = createElement('div', { className: 'mb-6' });
+
+        const header = createElement('div', { className: 'flex justify-between items-center mb-4 px-2' }, [
+            createElement('h3', { className: 'text-sm font-bold text-brand-text-secondary uppercase' }, '💳 Cartões de Crédito'),
+            createElement('button', {
+                className: 'text-xs text-brand-gold font-bold hover:underline',
+                onclick: () => window.app.openCreditCardModal()
+            }, '+ Novo')
+        ]);
+        container.appendChild(header);
 
         if (cards.length === 0) {
-            return `
-                <div class="mb-6">
-                    <div class="flex justify-between items-center mb-4 px-2">
-                        <h3 class="text-sm font-bold text-brand-text-secondary uppercase">💳 Cartões de Crédito</h3>
-                        <button onclick="window.app.openCreditCardModal()" class="text-xs text-brand-gold font-bold hover:underline">+ Novo Cartão</button>
-                    </div>
-                    <div class="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl p-6 text-center">
-                        <div class="w-14 h-14 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">💳</div>
-                        <p class="text-sm text-brand-text-secondary">Nenhum cartão cadastrado</p>
-                        <button onclick="window.app.openCreditCardModal()" class="mt-3 text-xs bg-purple-500/20 text-purple-400 px-4 py-2 rounded-lg hover:bg-purple-500/30 transition font-bold">
-                            Adicionar Cartão
-                        </button>
-                    </div>
-                </div>
-            `;
+            const emptyState = createElement('div', { className: 'bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 rounded-2xl p-6 text-center' }, [
+                createElement('div', { className: 'w-14 h-14 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl' }, '💳'),
+                createElement('p', { className: 'text-sm text-brand-text-secondary' }, 'Nenhum cartão cadastrado'),
+                createElement('button', {
+                    className: 'mt-3 text-xs bg-purple-500/20 text-purple-400 px-4 py-2 rounded-lg hover:bg-purple-500/30 transition font-bold',
+                    onclick: () => window.app.openCreditCardModal()
+                }, 'Adicionar Cartão')
+            ]);
+            container.appendChild(emptyState);
+            return container;
         }
 
         const today = new Date();
         const currentDay = today.getDate();
+        const cardsList = createElement('div', { className: 'space-y-4' });
 
-        return `
-            <div class="mb-6">
-                <div class="flex justify-between items-center mb-4 px-2">
-                    <h3 class="text-sm font-bold text-brand-text-secondary uppercase">💳 Cartões de Crédito</h3>
-                    <button onclick="window.app.openCreditCardModal()" class="text-xs text-brand-gold font-bold hover:underline">+ Novo</button>
-                </div>
-                <div class="space-y-4">
-                    ${cards.map(card => {
+        cards.forEach(card => {
             const daysUntilDue = card.billing_day >= currentDay
                 ? card.billing_day - currentDay
                 : (new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() - currentDay) + card.billing_day;
             const isDueSoon = daysUntilDue <= 5;
-            const invoiceAmount = (card.current_invoice || 0) / 100;
-            const limitUsed = card.credit_limit ? ((card.current_invoice / card.credit_limit) * 100).toFixed(0) : 0;
+            const invoiceAmountCents = card.current_invoice || 0;
+            const limitUsed = card.credit_limit ? ((invoiceAmountCents / card.credit_limit) * 100) : 0;
 
-            return `
-                            <div class="bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 rounded-2xl p-5 relative overflow-hidden shadow-xl">
-                                <!-- Card Design Elements -->
-                                <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-                                <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-                                
-                                <div class="relative z-10">
-                                    <!-- Header -->
-                                    <div class="flex justify-between items-start mb-4">
-                                        <div>
-                                            <p class="text-purple-200 text-[10px] uppercase tracking-widest font-bold">Fatura Atual</p>
-                                            <h4 class="text-2xl font-black text-white value-sensitive">
-                                                R$ ${invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                            </h4>
-                                        </div>
-                                        <div class="text-right">
-                                            <p class="text-white font-bold text-sm">${card.name}</p>
-                                            ${card.last_digits ? `<p class="text-purple-200 text-xs">**** ${card.last_digits}</p>` : ''}
-                                        </div>
-                                    </div>
+            const cardEl = createElement('div', { className: 'bg-gradient-to-br from-purple-600 via-purple-700 to-indigo-800 rounded-2xl p-5 relative overflow-hidden shadow-xl' }, [
+                // Design Elements
+                createElement('div', { className: 'absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2' }),
+                createElement('div', { className: 'absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2' }),
 
-                                    <!-- Due Date -->
-                                    <div class="flex justify-between items-center mb-4">
-                                        <p class="text-purple-200 text-xs">
-                                            📅 Vence dia <span class="text-white font-bold">${card.billing_day}</span>
-                                            ${isDueSoon ? `<span class="text-yellow-300 ml-1">(em ${daysUntilDue} dias)</span>` : ''}
-                                        </p>
-                                        ${card.credit_limit ? `
-                                            <p class="text-purple-200 text-xs">Pendentes: <span class="text-white font-bold">R$ ${invoiceAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
-                                        ` : ''}
-                                    </div>
+                // Content
+                createElement('div', { className: 'relative z-10' }, [
+                    // Header
+                    createElement('div', { className: 'flex justify-between items-start mb-4' }, [
+                        createElement('div', {}, [
+                            createElement('p', { className: 'text-purple-200 text-[10px] uppercase tracking-widest font-bold' }, 'Fatura Atual'),
+                            createElement('h4', { className: 'text-2xl font-black text-white value-sensitive' }, Money.format(invoiceAmountCents, true))
+                        ]),
+                        createElement('div', { className: 'text-right' }, [
+                            createElement('p', { className: 'text-white font-bold text-sm' }, card.name),
+                            card.last_digits ? createElement('p', { className: 'text-purple-200 text-xs' }, `**** ${card.last_digits}`) : null
+                        ])
+                    ]),
 
-                                    <!-- Limit Progress Bar -->
-                                    ${card.credit_limit ? `
-                                        <div class="h-1.5 bg-purple-900/50 rounded-full overflow-hidden mb-4">
-                                            <div class="h-full bg-gradient-to-r from-purple-400 to-pink-400 transition-all" style="width: ${Math.min(limitUsed, 100)}%"></div>
-                                        </div>
-                                    ` : ''}
+                    // Due Date
+                    createElement('div', { className: 'flex justify-between items-center mb-4' }, [
+                        createElement('p', { className: 'text-purple-200 text-xs' }, [
+                            '📅 Vence dia ',
+                            createElement('span', { className: 'text-white font-bold' }, card.billing_day),
+                            isDueSoon ? createElement('span', { className: 'text-yellow-300 ml-1' }, `(em ${daysUntilDue} dias)`) : null
+                        ]),
+                        card.credit_limit ? createElement('p', { className: 'text-purple-200 text-xs' }, [
+                            'Pendentes: ',
+                            createElement('span', { className: 'text-white font-bold' }, Money.format(invoiceAmountCents, true))
+                        ]) : null
+                    ]),
 
-                                    <!-- Action Buttons -->
-                                    <div class="flex gap-2">
-                                        <button onclick="window.app.openAddPurchaseModal('${card.id}')" 
-                                            class="flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
-                                            ➕ Compra
-                                        </button>
-                                        <button onclick="window.app.viewCardInvoice('${card.id}')" 
-                                            class="flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
-                                            📋 Ver Fatura
-                                        </button>
-                                        ${invoiceAmount > 0 ? `
-                                            <button onclick="window.app.payCreditCardInvoice('${card.id}', '${card.name}', ${card.current_invoice})" 
-                                                class="flex-1 bg-green-500/30 hover:bg-green-500/50 text-green-300 text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
-                                                ✅ Pagar
-                                            </button>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-        }).join('')}
-                </div>
-            </div>
-        `;
+                    // Limit Progress Bar
+                    card.credit_limit ? createElement('div', { className: 'h-1.5 bg-purple-900/50 rounded-full overflow-hidden mb-4' }, [
+                        createElement('div', {
+                            className: 'h-full bg-gradient-to-r from-purple-400 to-pink-400 transition-all',
+                            style: `width: ${Math.min(limitUsed, 100)}%`
+                        })
+                    ]) : null,
+
+                    // Action Buttons
+                    createElement('div', { className: 'flex gap-2' }, [
+                        createElement('button', {
+                            className: 'flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1',
+                            onclick: () => window.app.openAddPurchaseModal(card.id)
+                        }, [
+                            createElement('span', {}, '➕'), ' Compra'
+                        ]),
+                        createElement('button', {
+                            className: 'flex-1 bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1',
+                            onclick: () => window.app.viewCardInvoice(card.id)
+                        }, [
+                            createElement('span', {}, '📋'), ' Ver Fatura'
+                        ]),
+                        invoiceAmountCents > 0 ? createElement('button', {
+                            className: 'flex-1 bg-green-500/30 hover:bg-green-500/50 text-green-300 text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1',
+                            onclick: () => window.app.payCreditCardInvoice(card.id, card.name, card.current_invoice)
+                        }, [
+                            createElement('span', {}, '✅'), ' Pagar'
+                        ]) : null
+                    ])
+                ])
+            ]);
+            cardsList.appendChild(cardEl);
+        });
+
+        container.appendChild(cardsList);
+        return container;
     },
 
     openTransactionModal(mode = 'create', transaction = null, isRecurringDefault = false) {
@@ -1772,7 +1810,7 @@ window.app.openCreditCardModal = () => {
                 bank: form.bank.value,
                 last_digits: form.last_digits.value,
                 billing_day: form.billing_day.value,
-                credit_limit: form.credit_limit.value ? CurrencyMask.unmask(form.credit_limit.value) : null
+                credit_limit: form.credit_limit.value ? CurrencyMask.unmaskToFloat(form.credit_limit.value) : null
             });
             Toast.show('Cartão adicionado com sucesso!', 'success');
             modal.remove();
@@ -1829,7 +1867,7 @@ window.app.openAddPurchaseModal = (cardId) => {
         const form = e.target;
         try {
             await CreditCardService.addPurchase(form.card_id.value, {
-                amount: CurrencyMask.unmask(form.amount.value),
+                amount: CurrencyMask.unmaskToFloat(form.amount.value),
                 description: form.description.value,
                 purchase_date: form.purchase_date.value,
                 installments: form.installments.value

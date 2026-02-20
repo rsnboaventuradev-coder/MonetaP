@@ -2,7 +2,7 @@ import { supabase, SupabaseService } from './supabase.service.js';
 import { SyncService } from './sync.service.js';
 import { StoreService } from './store.service.js';
 import { Observable } from '../utils/observer.js';
-import { MoneyHelper } from '../utils/money.js';
+import { Money } from '../utils/money.js';
 
 const CACHE_KEY_TRANSACTIONS = 'moneta_transactions_cache';
 
@@ -55,7 +55,7 @@ export const TransactionService = {
         // Convert pro_labore_amount from reais to centavos for comparison
         // profile.pro_labore_amount is stored as reais (e.g., 3500.00)
         // tx.amount is stored as centavos (e.g., 350000)
-        const proLaboreAmountCents = MoneyHelper.toCents(profile.pro_labore_amount);
+        const proLaboreAmountCents = Money.toCents(profile.pro_labore_amount);
 
         // 2. Check if transactions exist for this month
         // We look for a VERY specific pattern: matching amount, context, and description for this month
@@ -248,13 +248,13 @@ export const TransactionService = {
         // Standardize Amount to Cents (Integer)
         // Input `transaction.amount` might be "10.50" (Reais string), 10.50 (Reais float), or 1050 (Cents integer already?)
         // HINT: The UI usually sends "10.50" (raw value from unmaskToFloat).
-        // WE WILL USE MoneyHelper.toCents() which assumes input is REAIS if it looks floating/string.
+        // WE WILL USE Money.toCents() which assumes input is REAIS if it looks floating/string.
         let amountInCents = 0;
         if (transaction.amount !== undefined) {
             // Case: Logic might pass '1050' (cents) directly?
             // If we are unsure, we assume the Service Contract is: "Inputs are REAIS (float/string) unless specified".
             // However, recurring transactions pass `rule.amount` which is cents from DB.
-            // Problem: `MoneyHelper.toCents(1050)` -> 105000 (Incorrect!)
+            // Problem: `Money.toCents(1050)` -> 105000 (Incorrect!)
 
             // FIX: We need a reliable way. 
             // 1. If logic calling `create` is internal (like recursing), it sends Cents.
@@ -274,7 +274,7 @@ export const TransactionService = {
             if (transaction.amountIsCents) {
                 amountInCents = parseInt(transaction.amount);
             } else {
-                amountInCents = MoneyHelper.toCents(transaction.amount);
+                amountInCents = Money.toCents(transaction.amount);
             }
         }
 
@@ -307,7 +307,7 @@ export const TransactionService = {
 
     async createInstallments(transaction) {
         const { installmentsCount, installmentDay } = transaction;
-        const totalAmountCents = MoneyHelper.toCents(transaction.amount);
+        const totalAmountCents = Money.toCents(transaction.amount);
 
         const installmentCents = Math.floor(totalAmountCents / installmentsCount);
         const remainderCents = totalAmountCents % installmentsCount;
@@ -381,7 +381,7 @@ export const TransactionService = {
 
         // Prepare data for recurring_transactions table
         // Amount should be stored as CENTS (BigInt)
-        const amountInCents = MoneyHelper.toCents(transaction.amount);
+        const amountInCents = Money.toCents(transaction.amount);
 
         const newRule = {
             user_id: user.id,
@@ -418,7 +418,7 @@ export const TransactionService = {
             if (updates.amountIsCents) {
                 dbUpdates.amount = parseInt(updates.amount);
             } else {
-                dbUpdates.amount = MoneyHelper.toCents(updates.amount);
+                dbUpdates.amount = Money.toCents(updates.amount);
             }
         }
         // Map categoryId to category_id for Supabase

@@ -1,6 +1,6 @@
 import { supabase, SupabaseService } from './supabase.service.js';
 import { StoreService } from './store.service.js';
-import { MoneyHelper } from '../utils/money.js';
+import { Money } from '../utils/money.js';
 
 const CACHE_KEY_ACCOUNTS = 'moneta_accounts';
 
@@ -214,7 +214,7 @@ export const AccountsService = {
         const currentAmount = emergencyAccounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
 
         // monthlyCost usually comes as Reais from Profile/Input
-        const monthlyCostCents = MoneyHelper.toCents(monthlyCost || 5000);
+        const monthlyCostCents = Money.toCents(monthlyCost || 5000);
         const goalAmount = monthlyCostCents * targetMonths;
         const progress = goalAmount > 0 ? Math.min((currentAmount / goalAmount) * 100, 100) : 0;
 
