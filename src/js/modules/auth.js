@@ -79,12 +79,21 @@ export const AuthModule = {
                                 <path d="M76 172 V 84 H 100 L 128 124 L 156 84 H 180 V 172 H 156 V 116 L 128 156 L 100 116 V 172 H 76 Z" fill="#0F0F12"/>
                             </svg>
                         </div>
-                        <h2 class="text-3xl font-bold tracking-tight text-brand-text-primary mb-2">${title}</h2>
-                        <p class="text-brand-text-secondary text-sm">${subtitle}</p>
+                        <h2 class="text-3xl font-bold tracking-tight text-brand-text-primary mb-2">${this.isResettingPassword ? 'Nova Senha' : title}</h2>
+                        <p class="text-brand-text-secondary text-sm">${this.isResettingPassword ? 'Digite sua nova senha abaixo.' : subtitle}</p>
                     </div>
 
                     <div class="bg-brand-surface/50 backdrop-blur-xl border border-brand-border rounded-3xl p-8 shadow-2xl">
                         <form class="space-y-6" id="auth-form">
+                            ${this.isResettingPassword ? `
+                            <div>
+                                <label for="new-password" class="block text-xs font-medium uppercase tracking-wide text-brand-text-secondary">Nova Senha</label>
+                                <div class="mt-2">
+                                    <input id="new-password" name="new-password" type="password" required placeholder="••••••••"
+                                        class="block w-full rounded-xl border border-brand-border bg-[#27272a] px-4 py-3 text-white shadow-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green sm:text-sm placeholder-gray-400 outline-none transition-all">
+                                </div>
+                            </div>
+                            ` : `
                             ${this.isRegistering ? `
                             <div>
                                 <label for="fullName" class="block text-xs font-medium uppercase tracking-wide text-brand-text-secondary">Nome Completo</label>
@@ -113,19 +122,22 @@ export const AuthModule = {
                                         class="block w-full rounded-xl border border-brand-border bg-[#27272a] px-4 py-3 text-white shadow-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green sm:text-sm placeholder-gray-400 outline-none transition-all">
                                 </div>
                             </div>
+                            `}
 
                             <div>
                                 <button type="submit"
                                     class="flex w-full justify-center rounded-xl bg-gradient-to-r from-brand-green to-brand-green-light px-3 py-3.5 text-sm font-bold leading-6 text-brand-text-primary shadow-glow-green hover:opacity-90 active:scale-[0.98] transition-all duration-200">
-                                    ${btnText}
+                                    ${this.isResettingPassword ? 'Salvar Nova Senha' : btnText}
                                 </button>
                             </div>
                         </form>
                         
                         <div class="mt-8 text-center">
+                            ${this.isResettingPassword ? '' : `
                             <button id="toggle-auth" class="text-sm font-semibold text-brand-text-secondary hover:text-brand-text-primary transition">
                                 ${toggleText}
                             </button>
+                            `}
                         </div>
                         <div id="auth-message" class="mt-4 text-center text-sm font-semibold min-h-[1.5rem]"></div>
                     </div>
@@ -173,19 +185,47 @@ export const AuthModule = {
         if (form) {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const email = document.getElementById('email').value;
-                const password = document.getElementById('password').value;
-                const fullName = this.isRegistering ? document.getElementById('fullName').value : null;
+
                 const submitBtn = form.querySelector('button[type="submit"]');
 
                 try {
                     this.setLoading(submitBtn, true);
                     this.showMessage('Processando...', 'warning');
 
-                    if (this.isRegistering) {
+                    if (this.isResettingPassword) {
+                        const newPassword = document.getElementById('new-password').value;
+                        if (!newPassword || newPassword.length < 6) {
+                            throw new Error("A senha deve ter pelo menos 6 caracteres.");
+                        }
+
+                        const { error } = await supabase.auth.updateUser({
+                            password: newPassword
+                        });
+
+                        if (error) throw error;
+
+                        this.showMessage('Senha alterada com sucesso! Redirecionando...', 'success');
+                        this.isResettingPassword = false;
+
+                        // Clear the URL hash completely
+                        window.history.replaceState(null, document.title, window.location.pathname);
+
+                        // Navigate to dashboard
+                        setTimeout(() => {
+                            if (window.app) window.app.navigateTo('dashboard');
+                        }, 1500);
+
+                    } else if (this.isRegistering) {
+                        const email = document.getElementById('email').value;
+                        const password = document.getElementById('password').value;
+                        const fullName = document.getElementById('fullName').value;
+
                         await AuthService.register(email, password, fullName);
                         this.showMessage('Sucesso! Verifique seu email.', 'success');
                     } else {
+                        const email = document.getElementById('email').value;
+                        const password = document.getElementById('password').value;
+
                         await AuthService.login(email, password);
                         this.showMessage('Login realizado! Redirecionando...', 'success');
                         // Navigate using SPA router instead of hard reload

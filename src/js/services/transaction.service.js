@@ -58,16 +58,13 @@ export const TransactionService = {
         const proLaboreAmountCents = Money.toCents(profile.pro_labore_amount);
 
         // 2. Check if transactions exist for this month
-        // We look for a VERY specific pattern: matching amount, context, and description for this month
+        // We look for a VERY specific pattern: matching amount, context, and classification for this month
         const proLaboreTx = this.transactions.find(tx => {
             const txDate = new Date(tx.date);
             return txDate.getMonth() === month &&
                 txDate.getFullYear() === year &&
                 parseInt(tx.amount) === proLaboreAmountCents &&
-                (
-                    (tx.context === 'business' && tx.type === 'expense' && tx.description === 'Pró-Labore (Saída PJ)') ||
-                    (tx.context === 'personal' && tx.type === 'income' && tx.description === 'Pró-Labore (Entrada PF)')
-                );
+                tx.classification === 'pro_labore';
         });
 
         if (proLaboreTx) return; // Already exists
@@ -86,7 +83,8 @@ export const TransactionService = {
             date: today.toISOString(),
             context: 'business',
             status: 'paid',
-            category: 'pro-labore'
+            category: 'pro-labore',
+            classification: 'pro_labore'
         };
 
         // In Personal
@@ -97,7 +95,8 @@ export const TransactionService = {
             date: today.toISOString(),
             context: 'personal',
             status: 'paid',
-            category: 'salary'
+            category: 'salary',
+            classification: 'pro_labore'
         };
 
         await this.create(outTx);
@@ -451,6 +450,34 @@ export const TransactionService = {
             const amount = parseInt(tx.amount || 0);
             return tx.type === 'income' ? acc + amount : acc - amount;
         }, 0);
+    },
+
+    /**
+     * Calculates the projected balance based on current balance and all pending transactions 
+     * up to a certain end date (default is end of current month).
+     * @param {Date} endDate - Target date for projection
+     */
+    getProjectedBalance(endDate = null) {
+        if (!endDate) {
+            const today = new Date();
+            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+        }
+
+        const currentBalance = this.getBalance();
+
+        // Find all pending transactions up to the end date
+        const pendingTxs = this.transactions.filter(tx => {
+            const txDate = new Date(tx.date);
+            return tx.status === 'pending' && txDate <= endDate;
+        });
+
+        // Calculate net change from pending transactions
+        const pendingNetChange = pendingTxs.reduce((acc, tx) => {
+            const amount = parseInt(tx.amount || 0);
+            return tx.type === 'income' ? acc + amount : acc - amount;
+        }, 0);
+
+        return currentBalance + pendingNetChange;
     },
 
     /**

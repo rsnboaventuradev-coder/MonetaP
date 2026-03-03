@@ -109,9 +109,32 @@ class App {
             const nav = document.getElementById('bottom-nav');
             if (nav) nav.innerHTML = '';
 
+            // Check if URL has a password recovery token
+            if (window.location.hash.includes('type=recovery')) {
+                AuthModule.isResettingPassword = true;
+                // Clear the hash for a cleaner URL, Supabase already parsed it into the session!
+                // Wait, if it's not authenticated yet, we shouldn't wipe it unless necessary.
+            }
+
             AuthModule.render();
             this.currentView = 'login';
         } else {
+            // If user is authenticated AND type=recovery is present, they just clicked the reset link
+            // Supabase auto-logs them in with that token!
+            if (window.location.hash.includes('type=recovery')) {
+                // Clear the hash from UI
+                window.history.replaceState(null, document.title, window.location.pathname);
+
+                // Keep them on the auth view but show reset password form
+                const nav = document.getElementById('bottom-nav');
+                if (nav) nav.innerHTML = '';
+
+                AuthModule.isResettingPassword = true;
+                AuthModule.render();
+                this.currentView = 'login';
+                return;
+            }
+
             // Default to dashboard if coming from login
             if (this.currentView === 'login' || !this.currentView) {
                 this.navigateTo('dashboard');

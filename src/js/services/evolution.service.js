@@ -104,32 +104,32 @@ export const EvolutionService = {
 
     calculateLiquidity(profile) {
         // 1. Start with Profile Initial Balance (from Raio-X)
-        let total = profile?.current_balance || 0;
+        // Standardizing: profile.current_balance should be in cents if we follow the rule, 
+        // but if it's float from DB, we convert.
+        let total = 0;
+        if (profile?.current_balance) {
+            // If it's a small number, it's likely Reais. If it's large, it might be cents.
+            // But better to be explicit. Most profile fields from onboarding were floats.
+            total = profile.current_balance > 100000 ? profile.current_balance : Math.round(profile.current_balance * 100);
+        }
 
         // 2. Add Accounts Balance (TODO: Fetch from accounts service if implemented properly)
-        // const accountsBalance = AccountsService.getTotalBalance() / 100; 
+        // const accountsBalance = AccountsService.getTotalBalance(); 
         // total += accountsBalance;
 
         // 3. Add Investments with Liquidity
         const investmentsLiquidity = InvestmentsService.investments
             .filter(i => i.type === 'treasure' || i.type === 'fixed_income') // Approximating
-            .reduce((acc, curr) => acc + (curr.quantity * curr.current_price), 0);
+            .reduce((acc, curr) => acc + (curr.quantity * (curr.current_price || 0)), 0);
 
-        // Convert investments (cents) to units if mixed? No, service usually uses cents. 
-        // Let's assume current_balance is in plain form (float) from DB based on previous files, 
-        // but wait, DB mostly uses cents or float?
-        // onboarding/index.ts takes body.current_balance. Usually UI sends float.
-        // InvestmentsService uses cents.
-        // Let's standardize on Reais (float) for this logic for now, dividing investments by 100.
-
-        total += (investmentsLiquidity / 100);
+        total += investmentsLiquidity;
 
         return total;
     },
 
     calculateAvgCostOfLiving() {
         const transactions = TransactionService.transactions;
-        if (!transactions || transactions.length === 0) return 2000; // Default fallback
+        if (!transactions || transactions.length === 0) return 200000; // Default fallback (R$ 2.000,00)
 
         const now = new Date();
         const threeMonthsAgo = new Date();
@@ -140,10 +140,10 @@ export const EvolutionService = {
             new Date(t.date) >= threeMonthsAgo
         );
 
-        if (recentExpenses.length === 0) return 2000;
+        if (recentExpenses.length === 0) return 200000;
 
         const total = recentExpenses.reduce((acc, curr) => acc + Math.abs(curr.amount), 0);
-        return total / 3;
+        return Math.round(total / 3);
     }
 };
 

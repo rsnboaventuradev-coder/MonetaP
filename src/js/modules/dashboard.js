@@ -7,6 +7,7 @@ import { AccountsService } from '../services/accounts.service.js';
 import { GamificationService } from '../services/gamification.service.js';
 import { SupabaseService } from '../services/supabase.service.js';
 import { ReportsService } from '../services/reports.service.js';
+import { InsightsService } from '../services/insights.service.js';
 
 export const DashboardModule = {
     currentContext: 'personal', // 'personal' | 'business'
@@ -121,14 +122,14 @@ export const DashboardModule = {
         if (user) {
             const { data: profile } = await SupabaseService.client
                 .from('profiles')
-                .select('monthly_income,full_name')
+                .select('monthly_income,name')
                 .eq('id', user.id)
                 .maybeSingle();
 
             if (profile) {
                 if (profile.monthly_income) avgCostOfLiving = parseFloat(profile.monthly_income);
                 // Priority: Full Name > Email > 'Usuário'
-                userName = profile.full_name || (user.email ? user.email.split('@')[0] : 'Usuário');
+                userName = profile.name || (user.email ? user.email.split('@')[0] : 'Usuário');
             } else {
                 userName = user.email ? user.email.split('@')[0] : 'Usuário';
             }
@@ -137,13 +138,35 @@ export const DashboardModule = {
         // Format First Name
         const firstName = userName.split(' ')[0];
 
+        // 0. ONBOARDING CHECK
+        // Fetch the onboarding completion status
+        let onboardingCompleted = true; // Assume true if we fail to fetch
+        if (user) {
+            const { data: profileData } = await SupabaseService.client
+                .from('profiles')
+                .select('onboarding_completed')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            if (profileData && profileData.onboarding_completed === false) {
+                onboardingCompleted = false;
+            }
+        }
+
+        if (!onboardingCompleted) {
+            if (window.OnboardingModule && typeof window.OnboardingModule.renderWelcomeScreen === 'function') {
+                window.OnboardingModule.renderWelcomeScreen(container, firstName);
+                return;
+            }
+        }
+
         const currentMonth = this.selectedDate.getMonth();
         const currentYear = this.selectedDate.getFullYear();
         const monthLabel = this.selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
         // 1. BALANCES
-        const walletBalance = AccountsService.getTotalBalance() / 100; // Contas em centavos
-        const investmentsBalance = InvestmentsService.getTotalValue();
+        const walletBalance = AccountsService.getTotalBalance(true) / 100; // Contas em centavos (todas as contas para o Patrimônio Total)
+        const investmentsBalance = InvestmentsService.getTotalValue() / 100; // Cents to Reais
         const totalNetWorth = walletBalance + investmentsBalance;
 
         // 2. MONTHLY SUMMARY (Income vs Expense)
@@ -201,7 +224,7 @@ export const DashboardModule = {
 
                 <!-- 1. TOTAL BALANCE CARD -->
                 <div class="px-6">
-                    <div class="bg-gradient-to-br from-background-card_light via-white to-slate-50 dark:from-background-card_dark dark:via-background-card_dark dark:to-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none relative overflow-hidden group">
+                    <div class="bg-gradient-to-br from-background-card_light via-white to-slate-50 dark:from-background-card_dark dark:via-background-card_dark dark:to-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm dark:shadow-none relative overflow-hidden group active:scale-[0.98] transition-all duration-300 cursor-pointer">
                          <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-32 w-32 text-brand-500" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
@@ -222,7 +245,7 @@ export const DashboardModule = {
 
                 <!-- 2. MONTHLY SUMMARY WIDGET -->
                 <div class="px-6 grid grid-cols-2 gap-3">
-                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group">
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md active:scale-[0.95] transition-all duration-300 flex flex-col justify-between cursor-pointer group">
                          <div class="w-8 h-8 rounded-lg bg-accent-success/10 text-accent-success flex items-center justify-center mb-3 group-hover:bg-accent-success/20 transition">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
                          </div>
@@ -231,7 +254,7 @@ export const DashboardModule = {
                              <p class="text-lg font-bold text-text-primary_light dark:text-text-primary_dark value-sensitive mt-0.5">${((summaryStats.income || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                          </div>
                     </div>
-                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group">
+                    <div class="bg-background-card_light dark:bg-background-card_dark p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md active:scale-[0.95] transition-all duration-300 flex flex-col justify-between cursor-pointer group">
                          <div class="w-8 h-8 rounded-lg bg-accent-danger/10 text-accent-danger flex items-center justify-center mb-3 group-hover:bg-accent-danger/20 transition">
                              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
                          </div>
@@ -241,6 +264,9 @@ export const DashboardModule = {
                          </div>
                     </div>
                 </div>
+
+                <!-- 2.3 AI SAVINGS TIPS (INSIGHTS) -->
+                ${await this.renderInsights()}
 
                 <!-- 2.5 EMERGENCY FUND CARD -->
                 ${this.renderEmergencyFundCard(avgCostOfLiving)}
@@ -302,11 +328,19 @@ export const DashboardModule = {
         }).join('')}
                     </div>
                 </div>
+                </div>
                 
                 <!-- VERSION FOOTER -->
                 <div class="px-6 pb-6 text-center">
                     <p class="text-[10px] text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest opacity-50">Moneta v1.0.0</p>
                 </div>
+
+                <!-- FAB ADD BUTTON (Mobile First) -->
+                <button onclick="window.app.openTransactionModal()" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-500 rounded-full shadow-[0_4px_20px_-4px_rgba(15,82,186,0.6)] text-white flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition-all duration-300 z-30">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
 
                 <!-- MODAL (Integrated for Quick Actions) -->
                 ${this.renderModalID()}
@@ -317,6 +351,50 @@ export const DashboardModule = {
 
         // Render Charts after DOM update
         await this.renderCharts(currentMonth, currentYear);
+    },
+
+    async renderInsights() {
+        // Prevent insights from breaking rendering
+        try {
+            const tips = await InsightsService.generateTips();
+            if (!tips || tips.length === 0) return '';
+
+            let html = `
+                <div class="px-6">
+                    <h3 class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3 ml-1 bg-gradient-to-r from-brand-500 to-transparent bg-clip-text text-transparent">Insights & Dicas</h3>
+                    <div class="space-y-3">
+            `;
+
+            tips.forEach(tip => {
+                const colorClass = tip.color.startsWith('brand-') ? tip.color : `blue-500`;
+                const bgClass = tip.color.startsWith('brand-') ? `bg-${tip.color}/10` : `bg-blue-500/10`;
+                const borderClass = tip.color.startsWith('brand-') ? `border-${tip.color}/20` : `border-blue-500/20`;
+                const textClass = tip.color.startsWith('brand-') ? `text-${tip.color}` : `text-blue-500`;
+
+                html += `
+                    <div class="${bgClass} border ${borderClass} rounded-2xl p-4 flex gap-4 items-start shadow-sm hover:shadow-md transition">
+                        <div class="w-10 h-10 rounded-full bg-white dark:bg-background-dark/50 flex items-center justify-center shrink-0 ${textClass} shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                ${tip.icon}
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-text-primary_light dark:text-text-primary_dark mb-1">${tip.title}</h4>
+                            <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark leading-relaxed">${tip.message}</p>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+            return html;
+        } catch (e) {
+            console.error('Error rendering insights', e);
+            return '';
+        }
     },
 
     async renderCharts(month, year) {
@@ -484,26 +562,26 @@ export const DashboardModule = {
 
         if (emergencyStatus.accountsCount === 0) {
             return `
-                <div class="px-6">
-                    <div class="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-3xl p-6">
-                        <div class="flex items-center gap-3 mb-3">
-                            <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                </svg>
+                    < div class="px-6" >
+                        <div class="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-3xl p-6">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                    <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-bold text-brand-text-primary">Reserva de Emergência</h3>
+                                    <p class="text-xs text-brand-text-secondary">Proteja seu futuro financeiro</p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 class="text-sm font-bold text-brand-text-primary">Reserva de Emergência</h3>
-                                <p class="text-xs text-brand-text-secondary">Proteja seu futuro financeiro</p>
-                            </div>
+                            <p class="text-xs text-brand-text-secondary mb-3">Marque contas como reserva de emergência em Investimentos → Contas</p>
+                            <button onclick="window.app.navigateTo('investments')" class="text-xs bg-blue-500/20 text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-500/30 transition font-bold">
+                                Configurar Agora
+                            </button>
                         </div>
-                        <p class="text-xs text-brand-text-secondary mb-3">Marque contas como reserva de emergência em Investimentos → Contas</p>
-                        <button onclick="window.app.navigateTo('investments')" class="text-xs bg-blue-500/20 text-blue-400 px-4 py-2 rounded-lg hover:bg-blue-500/30 transition font-bold">
-                            Configurar Agora
-                        </button>
-                    </div>
-                </div>
-            `;
+                </div >
+                    `;
         }
 
         const currentFormatted = (emergencyStatus.currentAmount / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -512,39 +590,39 @@ export const DashboardModule = {
         const borderColor = emergencyStatus.isComplete ? 'border-green-500/30' : 'border-blue-500/30';
 
         return `
-            <div class="px-6">
-                <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border ${borderColor} rounded-3xl p-6 relative overflow-hidden">
-                    ${emergencyStatus.isComplete ? '<div class="absolute top-2 right-2 text-2xl animate-bounce">🎉</div>' : ''}
-                    
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <div class="flex items-center gap-2 mb-2">
-                                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                </svg>
-                                <p class="text-xs text-blue-400 uppercase tracking-widest font-bold">Reserva de Emergência</p>
+                    < div class="px-6" >
+                        <div class="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border ${borderColor} rounded-3xl p-6 relative overflow-hidden">
+                            ${emergencyStatus.isComplete ? '<div class="absolute top-2 right-2 text-2xl animate-bounce">🎉</div>' : ''}
+
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                        </svg>
+                                        <p class="text-xs text-blue-400 uppercase tracking-widest font-bold">Reserva de Emergência</p>
+                                    </div>
+                                    <h3 class="text-3xl font-black text-brand-text-primary value-sensitive">${currentFormatted}</h3>
+                                    <p class="text-xs text-brand-text-secondary mt-1">Meta: ${goalFormatted} (6 meses)</p>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-2xl font-black ${emergencyStatus.isComplete ? 'text-green-400' : 'text-blue-400'}">${emergencyStatus.progress}%</div>
+                                    <p class="text-[10px] text-brand-text-secondary">${emergencyStatus.accountsCount} conta(s)</p>
+                                </div>
                             </div>
-                            <h3 class="text-3xl font-black text-brand-text-primary value-sensitive">${currentFormatted}</h3>
-                            <p class="text-xs text-brand-text-secondary mt-1">Meta: ${goalFormatted} (6 meses)</p>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-2xl font-black ${emergencyStatus.isComplete ? 'text-green-400' : 'text-blue-400'}">${emergencyStatus.progress}%</div>
-                            <p class="text-[10px] text-brand-text-secondary">${emergencyStatus.accountsCount} conta(s)</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Progress Bar -->
-                    <div class="relative h-3 bg-black/30 rounded-full overflow-hidden">
-                        <div class="absolute inset-0 bg-gradient-to-r ${progressColor} transition-all duration-500" style="width: ${emergencyStatus.progress}%"></div>
-                    </div>
-                    
-                    ${emergencyStatus.isComplete
+
+                            <!-- Progress Bar -->
+                            <div class="relative h-3 bg-black/30 rounded-full overflow-hidden">
+                                <div class="absolute inset-0 bg-gradient-to-r ${progressColor} transition-all duration-500" style="width: ${emergencyStatus.progress}%"></div>
+                            </div>
+
+                            ${emergencyStatus.isComplete
                 ? '<p class="text-xs text-green-400 font-bold mt-3">✅ Meta alcançada! Você está protegido.</p>'
                 : `<p class="text-xs text-brand-text-secondary mt-3">Faltam ${((emergencyStatus.goalAmount - emergencyStatus.currentAmount) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para atingir a meta</p>`
             }
-                </div>
-            </div>
-        `;
+                        </div>
+            </div >
+                    `;
     },
 
     async renderUpcomingExpenses() {
@@ -572,23 +650,23 @@ export const DashboardModule = {
         if (upcoming.length === 0) return '';
 
         return `
-            <div class="px-6">
-                <div class="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20 rounded-3xl p-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
-                                <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
+                    <div class="px-6">
+                        <div class="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border border-orange-500/20 rounded-3xl p-5">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="text-sm font-bold text-brand-text-primary">📅 Próximos Vencimentos</h3>
+                                        <p class="text-[10px] text-brand-text-secondary">Despesas chegando nos próximos 7 dias</p>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <h3 class="text-sm font-bold text-brand-text-primary">📅 Próximos Vencimentos</h3>
-                                <p class="text-[10px] text-brand-text-secondary">Despesas chegando nos próximos 7 dias</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        ${upcoming.map(r => {
+                            <div class="space-y-2">
+                                ${upcoming.map(r => {
             const dueDay = r.day_of_month;
             const daysUntil = dueDay >= currentDay ? dueDay - currentDay : (daysInMonth - currentDay) + dueDay;
             const urgencyClass = daysUntil <= 2 ? 'bg-red-500/20 border-red-500/30 text-red-400' : 'bg-orange-500/10 border-orange-500/20';
@@ -612,10 +690,10 @@ export const DashboardModule = {
                                 </div>
                             `;
         }).join('')}
-                    </div>
-                </div>
+                            </div>
+                        </div>
             </div>
-        `;
+                    `;
     },
 
 
@@ -626,18 +704,23 @@ export const DashboardModule = {
 
         return `
             <div id="dashboard-tx-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity duration-300" id="close-dash-modal-overlay"></div>
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:min-w-[500px] md:h-auto animate-slide-up md:animate-scale-in">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300" id="close-dash-modal-overlay"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl shadow-2xl md:border md:border-brand-border/60 flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-xl md:min-w-[500px] md:h-auto max-h-[90vh] animate-slide-up md:animate-scale-in overflow-hidden">
                     
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile Only) -->
-                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
 
                     <!-- Header -->
-                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
-                         <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
-                             🚀 Nova Operação
-                        </h3>
-                         <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-dash-modal-btn">
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
+                        <div>
+                            <h3 class="text-lg font-black text-brand-text-primary tracking-tight">Nova Operação</h3>
+                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest opacity-70 mt-0.5">${isBusiness ? 'Registro Empresarial' : 'Registro Pessoal'}</p>
+                        </div>
+                         <button class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90" id="close-dash-modal-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
@@ -645,47 +728,48 @@ export const DashboardModule = {
                     </div>
                     
                     <!-- Body (Scrollable) -->
-                    <form id="dash-tx-form" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                         <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Valor</label>
-                            <div class="relative group">
-                                <span class="absolute left-0 top-1/2 -translate-y-1/2 text-brand-text-secondary text-2xl font-light group-focus-within:text-brand-gold transition">R$</span>
-                                <input type="number" inputmode="decimal" step="0.01" name="amount" id="dash-amount-input" required 
-                                    class="w-full bg-transparent text-5xl font-black text-brand-text-primary border-none focus:ring-0 pl-10 placeholder-brand-surface-light p-0 caret-brand-gold" 
-                                    placeholder="0,00">
-                            </div>
+                    <form id="dash-tx-form" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10">
+                        
+                        <!-- Amount - large display -->
+                        <div class="bg-brand-bg rounded-2xl p-5 border border-brand-border/50">
+                            <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-2">Valor da Operação</label>
+                            <input type="text" name="amount" id="dash-amount-input" data-currency="true" required 
+                                class="w-full bg-transparent text-4xl leading-none font-black text-brand-text-primary border-0 p-0 focus:ring-0 outline-none placeholder:text-brand-text-secondary/25" 
+                                placeholder="R$ 0,00">
                         </div>
 
+                        <!-- Type Selector -->
                         <div class="grid grid-cols-2 gap-4">
-                            <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-brand-border bg-brand-bg cursor-pointer overflow-hidden group hover:bg-brand-surface-light transition">
-                                <input type="radio" name="type" value="income" class="peer hidden">
-                                <div class="absolute inset-0 border-2 border-green-500 opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-green-500/20 text-green-500 mb-2 flex items-center justify-center group-hover:scale-110 transition">
-                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                            <label class="cursor-pointer relative">
+                                <input type="radio" name="type" value="income" class="peer sr-only">
+                                <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-emerald-500/40 peer-checked:bg-emerald-500/15 peer-checked:border-emerald-500/60 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                    <div class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                                    </div>
+                                    <span class="text-xs font-bold text-brand-text-secondary peer-checked:text-emerald-400">Entrada</span>
                                 </div>
-                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-green-500 transition">Entrada</span>
                             </label>
-                             <label class="relative flex flex-col items-center justify-center p-4 rounded-xl border border-brand-border bg-brand-bg cursor-pointer overflow-hidden group hover:bg-brand-surface-light transition">
-                                <input type="radio" name="type" value="expense" class="peer hidden" checked>
-                                <div class="absolute inset-0 border-2 border-red-500 opacity-0 peer-checked:opacity-100 rounded-xl transition"></div>
-                                <div class="w-10 h-10 rounded-full bg-red-500/20 text-red-500 mb-2 flex items-center justify-center group-hover:scale-110 transition">
-                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                            <label class="cursor-pointer relative">
+                                <input type="radio" name="type" value="expense" class="peer sr-only" checked>
+                                <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-red-500/40 peer-checked:border-red-500/60 peer-checked:bg-red-500/15 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                    <div class="w-10 h-10 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center">
+                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                                    </div>
+                                    <span class="text-xs font-bold text-brand-text-secondary peer-checked:text-red-400">Saída</span>
                                 </div>
-                                <span class="font-bold text-sm text-brand-text-secondary peer-checked:text-red-500 transition">Saída</span>
                             </label>
                         </div>
                         
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Descrição</label>
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Descrição</label>
                             <input type="text" name="description" id="dash-desc-input" required 
-                                class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition placeholder-brand-text-secondary font-medium"
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30"
                                 placeholder="O que foi isso?">
                         </div>
 
-                         <!-- Dynamic Fields based on global context would be ideal, but for Quick Action we simplify -->
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Categoria / Contexto</label>
-                            <select name="category" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold outline-none appearance-none">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Categoria / Contexto</label>
+                            <select name="category" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10 cursor-pointer">
                                 <option value="general">Geral</option>
                                 <option value="food">Alimentação</option>
                                 <option value="transport">Transporte / Uber</option>
@@ -696,21 +780,21 @@ export const DashboardModule = {
                         </div>
 
                         ${partners.length > 0 ? `
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Vincular a Parceiro (Opcional)</label>
-                            <select name="partner_id" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary focus:border-brand-gold outline-none appearance-none">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Vincular a Parceiro (Opcional)</label>
+                            <select name="partner_id" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10 cursor-pointer">
                                 <option value="" selected>Nenhum</option>
                                 ${partners.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
                             </select>
                         </div>
                         ` : ''}
 
-                         <div class="pb-32 md:pb-0"></div>
+                         <div class="pb-32 md:pb-6"></div>
                     </form>
 
                     <!-- Footer (Fixed) -->
-                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
-                        <button type="submit" form="dash-tx-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-bold text-lg py-4 rounded-xl shadow-lg shadow-brand-gold/20 active:scale-[0.98] transition">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="dash-tx-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-gold/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2">
                             Confirmar Lançamento
                         </button>
                     </div>
@@ -790,7 +874,7 @@ export const DashboardModule = {
                             emoji = cat.icon;
                         }
 
-                        option.text = emoji ? `${emoji} ${cat.name}` : cat.name;
+                        option.text = emoji ? `${emoji} ${cat.name} ` : cat.name;
                         categorySelect.appendChild(option);
                     });
 
@@ -875,7 +959,7 @@ window.app.openTransactionModal = (type = 'income', presets = {}) => {
     if (!modal) return;
 
     // Set type
-    const typeInput = document.querySelector(`input[name="type"][value="${type}"]`);
+    const typeInput = document.querySelector(`input[name = "type"][value = "${type}"]`);
     if (typeInput) typeInput.checked = true;
 
     // Set presets

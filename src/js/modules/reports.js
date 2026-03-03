@@ -22,12 +22,20 @@ export const ReportsModule = {
                         <h1 class="text-2xl font-bold text-brand-text-primary mb-1">Relatórios</h1>
                         <p class="text-brand-text-secondary text-sm">Análise visual das suas finanças</p>
                     </div>
-                    <button onclick="ReportsService.exportToCSV(new Date().getMonth(), new Date().getFullYear(), 'all')" class="bg-brand-surface border border-brand-border text-brand-text-primary text-[10px] font-bold px-3 py-2 rounded-lg hover:bg-brand-surface-light transition flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Exportar
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="ReportsService.exportToCSV(new Date().getMonth(), new Date().getFullYear(), 'all')" class="bg-brand-surface border border-brand-border text-brand-text-primary text-[10px] font-bold px-3 py-2 rounded-lg hover:bg-brand-surface-light transition flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Exportar CSV
+                        </button>
+                        <button onclick="ReportsService.exportToPDF(new Date().getMonth(), new Date().getFullYear(), 'all')" class="bg-brand-500 text-white text-[10px] font-bold px-3 py-2 rounded-lg hover:bg-brand-600 transition flex items-center gap-2 shadow-glow-green">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            Exportar PDF
+                        </button>
+                    </div>
                 </header>
 
                 <div class="flex-1 overflow-y-auto p-4 pb-24 space-y-6">

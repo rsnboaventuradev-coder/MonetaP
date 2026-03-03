@@ -122,35 +122,59 @@ export const CreditCardService = {
         const user = session?.user;
         if (!user) throw new Error('User not authenticated');
 
-        const amountCents = Money.toCents(purchaseData.amount);
+        const totalAmountCents = Money.toCents(purchaseData.amount);
+        const installmentsCount = parseInt(purchaseData.installments) || 1;
 
-        // Calculate billing month based on card's billing day and purchase date
+        // Calculate amount per installment
+        const installmentCents = Math.floor(totalAmountCents / installmentsCount);
+        const remainderCents = totalAmountCents % installmentsCount;
+
         const purchaseDate = new Date(purchaseData.purchase_date || new Date());
         const card = this.cards.find(c => c.id === cardId);
-        let billingMonth = new Date(purchaseDate.getFullYear(), purchaseDate.getMonth(), 1);
 
-        // If purchase is after billing day, it goes to next month's bill
-        if (card && purchaseDate.getDate() > card.billing_day) {
-            billingMonth.setMonth(billingMonth.getMonth() + 1);
+        if (!card) throw new Error('Card not found');
+
+        const purchasesToInsert = [];
+
+        for (let i = 0; i < installmentsCount; i++) {
+            let currentAmount = installmentCents;
+            // Add remainder to the first installment
+            if (i === 0) currentAmount += remainderCents;
+
+            // Calculate billing month for this specific installment
+            let billingMonth = new Date(purchaseDate.getFullYear(), purchaseDate.getMonth(), 1);
+
+            // Initial offset based on billing day
+            if (purchaseDate.getDate() > card.billing_day) {
+                billingMonth.setMonth(billingMonth.getMonth() + 1);
+            }
+
+            // Add offset for the ongoing installments
+            billingMonth.setMonth(billingMonth.getMonth() + i);
+
+            // Give a contextual description if it's parceled
+            let description = purchaseData.description;
+            if (installmentsCount > 1) {
+                description = `${description} (${i + 1}/${installmentsCount})`;
+            }
+
+            purchasesToInsert.push({
+                card_id: cardId,
+                user_id: user.id,
+                description: description,
+                amount: currentAmount,
+                purchase_date: purchaseData.purchase_date || new Date().toISOString().split('T')[0],
+                installments: installmentsCount,
+                current_installment: i + 1,
+                category: purchaseData.category || null,
+                billing_month: billingMonth.toISOString().split('T')[0]
+            });
         }
-
-        const dbData = {
-            card_id: cardId,
-            user_id: user.id,
-            description: purchaseData.description,
-            amount: amountCents,
-            purchase_date: purchaseData.purchase_date || new Date().toISOString().split('T')[0],
-            installments: parseInt(purchaseData.installments) || 1,
-            current_installment: 1,
-            category: purchaseData.category || null,
-            billing_month: billingMonth.toISOString().split('T')[0]
-        };
 
         const { data, error } = await supabase
             .from('credit_card_purchases')
-            .insert([dbData])
-            .select()
-            .single();
+            .insert(purchasesToInsert) // Now pushing an array
+            .select();
 
         if (error) throw error;
 

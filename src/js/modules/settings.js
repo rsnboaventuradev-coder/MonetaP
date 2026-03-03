@@ -41,14 +41,14 @@ export const SettingsModule = {
             <div class="flex flex-col min-h-full bg-brand-bg safe-area-top pb-24 space-y-4">
                 
                 <!-- HEADER -->
-                <div class="px-6 pt-6 sticky top-0 z-20 bg-brand-bg/95 backdrop-blur-md pb-4 border-b border-brand-border">
-                     <p class="text-xs text-brand-text-secondary font-medium uppercase tracking-wider">Ajustes</p>
-                     <h1 class="text-2xl font-bold text-brand-text-primary leading-none mt-1">Configurações</h1>
+                <div class="px-6 pt-8 pb-4 sticky top-0 z-20 bg-brand-bg/80 backdrop-blur-xl">
+                     <p class="text-xs text-brand-text-secondary font-bold uppercase tracking-widest mb-1 opacity-80">Ajustes do Sistema</p>
+                     <h1 class="text-3xl font-black text-brand-text-primary tracking-tight">Configurações</h1>
                 </div>
 
                 <!-- TABS SCROLLER -->
-                <div class="px-6 overflow-x-auto scrollbar-none">
-                    <div class="flex gap-2">
+                <div class="px-6 pb-2 overflow-x-auto hide-scrollbar sticky top-[88px] z-10 bg-brand-bg/80 backdrop-blur-xl">
+                    <div class="flex gap-1 p-1 bg-brand-surface-light/50 border border-brand-border/50 rounded-2xl w-max">
                         ${this.renderTabButton('categories', 'Categorias')}
                         ${this.renderTabButton('profile', 'Perfil & Fiscal')}
                         ${this.renderTabButton('banking', 'Contas & Cartões')}
@@ -58,14 +58,15 @@ export const SettingsModule = {
                 </div>
 
                 <!-- CONTENT AREA -->
-                <div class="px-6 flex-1">
+                <div class="px-6 flex-1 pt-4">
                     ${this.renderContent(profile)}
                 </div>
             </div>
             
-            <!-- GLOBAL TOAST NOTIFICATION (Simple Implementation or use existing if any) -->
-            <div id="settings-toast" class="fixed top-6 left-1/2 -translate-x-1/2 bg-brand-green/90 text-brand-text-primary px-6 py-3 rounded-full shadow-lg transform -translate-y-20 transition-transform duration-300 z-50 font-bold backdrop-blur">
-                Salvo com sucesso!
+            <!-- GLOBAL TOAST NOTIFICATION -->
+            <div id="settings-toast" class="fixed top-6 left-1/2 -translate-x-1/2 bg-brand-green border border-brand-green/20 text-brand-darker px-8 py-4 rounded-2xl shadow-2xl transform -translate-y-24 transition-all duration-500 z-[9999] font-black tracking-tight backdrop-blur flex items-center gap-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                <span>Salvo com sucesso!</span>
             </div>
         `;
 
@@ -77,10 +78,13 @@ export const SettingsModule = {
 
     renderTabButton(id, label) {
         const isActive = this.activeTab === id;
+        const activeClass = 'bg-brand-surface text-brand-gold shadow-sm ring-1 ring-brand-border';
+        const inactiveClass = 'text-brand-text-secondary hover:text-brand-text-primary hover:bg-brand-surface/50';
         return `
-            <button class="whitespace-nowrap px-4 py-2 rounded-full text-xs font-bold transition-all ${isActive ? 'bg-brand-gold text-brand-darker shadow-lg shadow-brand-gold/20' : 'bg-brand-surface-light text-brand-text-secondary border border-brand-border'}"
+            <button class="relative whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${isActive ? activeClass : inactiveClass}"
                 data-tab="${id}">
                 ${label}
+                ${isActive ? '<div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-brand-gold"></div>' : ''}
             </button>
         `;
     },
@@ -102,47 +106,83 @@ export const SettingsModule = {
     },
 
     renderCategoriesTab() {
-        const categories = SettingsService.categories;
-        return `
-            <div class="space-y-6 animate-fade-in">
-                <!-- Add Form -->
-                <div class="bg-brand-surface rounded-2xl p-4 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-3">Nova Categoria</h3>
-                    <form id="add-category-form" class="space-y-3">
-                        <input type="text" name="name" placeholder="Nome (ex: Clínica A)" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-brand-gold outline-none" required>
-                        <div class="flex gap-2">
-                            <select name="type" class="flex-1 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                <option value="INCOME">Receita</option>
-                                <option value="EXPENSE">Despesa</option>
-                            </select>
-                            <select name="context" class="flex-1 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                <option value="personal">Pessoal</option>
-                                <option value="business">Empresa</option>
-                                <option value="both">Ambos</option>
-                            </select>
+        const categories = SettingsService.categories || [];
+        const incomes = categories.filter(c => c.type === 'INCOME');
+        const expenses = categories.filter(c => c.type === 'EXPENSE');
+
+        const renderCatItem = (c) => `
+            <div class="group flex items-center justify-between p-4 bg-brand-surface-light/30 border border-brand-border/50 rounded-2xl hover:bg-brand-surface transition-all">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-lg shadow-inner">
+                        ${c.type === 'INCOME' ? '🟢' : '🔴'}
+                    </div>
+                    <div>
+                        <p class="text-brand-text-primary font-bold text-sm select-all">${c.name}</p>
+                        <div class="text-[10px] flex gap-1 mt-1">
+                            ${c.context === 'business' || c.context === 'both' ? '<span class="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full font-bold tracking-wider">PJ</span>' : ''}
+                            ${c.context === 'personal' || c.context === 'both' ? '<span class="bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-bold tracking-wider">PF</span>' : ''}
                         </div>
-                        <button type="submit" class="w-full bg-brand-surface-light hover:bg-white/20 text-brand-text-primary font-bold py-3 rounded-xl transition text-sm">
-                            + Adicionar
-                        </button>
-                    </form>
+                    </div>
+                </div>
+                <button class="opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-2.5 rounded-xl transition-all" onclick="SettingsModule.deleteCategory('${c.id}')">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </button>
+            </div>
+        `;
+
+        return `
+            <div class="space-y-8 flex-1 pb-10">
+                <!-- Add Form -->
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-brand-gold/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1">Nova Categoria</h3>
+                        <p class="text-xs text-brand-text-secondary mb-5">Organize suas transações com categorias personalizadas.</p>
+                        <form id="add-category-form" class="space-y-4">
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-brand-text-secondary">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                                </span>
+                                <input type="text" name="name" placeholder="Nome da Categoria..." class="w-full bg-brand-bg rounded-xl border border-brand-border pl-12 pr-4 py-4 text-brand-text-primary text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold outline-none transition-all placeholder:text-brand-text-secondary/50 font-bold tracking-wide" required>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <select name="type" class="bg-brand-bg rounded-xl border border-brand-border px-4 py-3.5 text-brand-text-primary text-sm outline-none focus:border-brand-gold transition-colors appearance-none font-bold text-center select-arrow-none style-none text-opacity-90">
+                                    <option value="INCOME">🟢 Receita</option>
+                                    <option value="EXPENSE">🔴 Despesa</option>
+                                </select>
+                                <select name="context" class="bg-brand-bg rounded-xl border border-brand-border px-4 py-3.5 text-brand-text-primary text-sm outline-none focus:border-brand-gold transition-colors appearance-none font-bold text-center select-arrow-none style-none text-opacity-90">
+                                    <option value="personal">👤 Pessoal (PF)</option>
+                                    <option value="business">💼 Empresa (PJ)</option>
+                                    <option value="both">⚪ Ambos</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="w-full bg-brand-gold text-brand-darker font-black py-4 rounded-xl hover:scale-[1.02] shadow-lg shadow-brand-gold/20 transition-all uppercase tracking-widest text-xs mt-2">
+                                Adicionar
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
-                <!-- List -->
-                <div>
-                    <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3">Existentes</h3>
-                    <div class="space-y-2">
-                        ${categories.length === 0 ? '<p class="text-brand-text-secondary text-sm">Nenhuma categoria criada.</p>' : ''}
-                        ${categories.map(c => `
-                            <div class="flex items-center justify-between p-3 bg-brand-surface/50 rounded-xl border border-brand-border">
-                                <div>
-                                    <p class="text-brand-text-primary font-medium text-sm">${c.name}</p>
-                                    <p class="text-[10px] text-brand-text-secondary capitalize">${c.type && c.type.toUpperCase() === 'INCOME' ? '🟢 Receita' : '🔴 Despesa'} • ${c.context === 'business' ? '💼 PJ' : (c.context === 'personal' ? '👤 PF' : 'Ambos')}</p>
-                                </div>
-                                <button class="text-red-400 hover:text-red-300 p-2" onclick="SettingsModule.deleteCategory('${c.id}')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                </button>
-                            </div>
-                        `).join('')}
+                <!-- Lists -->
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-[10px] font-black text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span> Receitas
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            ${incomes.length === 0 ? '<p class="text-brand-text-secondary text-sm italic">Nenhuma registrada.</p>' : ''}
+                            ${incomes.map(renderCatItem).join('')}
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-4 mt-8 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></span> Despesas
+                        </h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            ${expenses.length === 0 ? '<p class="text-brand-text-secondary text-sm italic">Nenhuma registrada.</p>' : ''}
+                            ${expenses.map(renderCatItem).join('')}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -151,178 +191,260 @@ export const SettingsModule = {
 
     renderProfileTab(profile) {
         return `
-            <div class="space-y-6 animate-fade-in">
+            <div class="space-y-8 flex-1 pb-10">
                 <!-- Fiscal Data -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border shadow-card-sm hover:shadow-md transition-shadow">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-4 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-blue-500 rounded-full"></span>
-                        Dados Fiscais
-                    </h3>
-                    <form id="profile-fiscal-form" class="space-y-4">
-                        <div>
-                            <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">CPF (Pessoa Física)</label>
-                            <input type="text" name="cpf" value="${profile.cpf || ''}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-blue-500 outline-none">
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">CNPJ (Pessoa Jurídica)</label>
-                            <input type="text" name="cnpj" value="${profile.cnpj || ''}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-blue-500 outline-none">
-                        </div>
-                         <div>
-                            <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Regime Tributário</label>
-                            <select name="tax_regime" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                <option value="" disabled ${!profile.tax_regime ? 'selected' : ''}>Selecione...</option>
-                                <option value="simples" ${profile.tax_regime === 'simples' ? 'selected' : ''}>Simples Nacional</option>
-                                <option value="lucro_presumido" ${profile.tax_regime === 'lucro_presumido' ? 'selected' : ''}>Lucro Presumido</option>
-                                <option value="carne_leao" ${profile.tax_regime === 'carne_leao' ? 'selected' : ''}>Carnê-Leão (PF)</option>
-                            </select>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- Tab Visibility Customization -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border shadow-card-sm hover:shadow-md transition-shadow">
-                    <h3 class="text-lg font-bold text-brand-text-primary mb-2 flex items-center gap-2">
-                        <svg class="w-5 h-5 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-                        </svg>
-                        Personalização de Abas
-                    </h3>
-                    <p class="text-sm text-brand-text-secondary mb-4">Oculte abas que você não utiliza no dia a dia</p>
-                    
-                    <div class="space-y-3" id="tab-visibility-container">
-                        ${this.renderTabToggles(profile.hidden_tabs || [])}
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-blue-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span> Dados Fiscais
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Informações utilizadas para cálculo de impostos e análises patrimoniais.</p>
+                        
+                        <form id="profile-fiscal-form" class="space-y-5">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">CPF</label>
+                                    <input type="text" name="cpf" value="${profile.cpf || ''}" placeholder="000.000.000-00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold tracking-widest">
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">CNPJ</label>
+                                    <input type="text" name="cnpj" value="${profile.cnpj || ''}" placeholder="00.000.000/0000-00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold tracking-widest">
+                                </div>
+                            </div>
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Regime Tributário (Empresa principal)</label>
+                                <select name="tax_regime" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
+                                    <option value="" disabled ${!profile.tax_regime ? 'selected' : ''}>Selecione...</option>
+                                    <option value="simples" ${profile.tax_regime === 'simples' ? 'selected' : ''}>Simples Nacional</option>
+                                    <option value="lucro_presumido" ${profile.tax_regime === 'lucro_presumido' ? 'selected' : ''}>Lucro Presumido</option>
+                                    <option value="carne_leao" ${profile.tax_regime === 'carne_leao' ? 'selected' : ''}>Carnê-Leão (PF)</option>
+                                </select>
+                            </div>
+                        </form>
                     </div>
-                </div>
-
                 </div>
 
                 <!-- Theme Customization -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border shadow-card-sm">
-                    <div class="flex items-center justify-between mb-4">
-                        <div>
-                            <h3 class="text-lg font-bold text-brand-text-primary flex items-center gap-2">
-                                <svg class="w-5 h-5 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
-                                </svg>
-                                Aparência
-                            </h3>
-                            <p class="text-sm text-brand-text-secondary mt-1">Personalize o tema do aplicativo</p>
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-brand-gold/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-brand-gold/10"></div>
+                    <div class="relative z-10">
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 class="text-lg font-black text-brand-text-primary flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-brand-gold shadow-[0_0_10px_rgba(212,175,55,0.5)]"></span>Aparência
+                                </h3>
+                                <p class="text-xs text-brand-text-secondary mt-1">Personalize o tema do aplicativo</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-5 bg-brand-surface-light/30 rounded-2xl border border-brand-border/50 hover:bg-brand-surface transition-all group/item cursor-pointer" onclick="document.getElementById('theme-toggle').click()">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full bg-brand-bg flex items-center justify-center shadow-inner group-hover/item:scale-110 transition-transform">
+                                    <svg class="w-6 h-6 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-bold text-brand-text-primary tracking-wide">Modo Escuro</p>
+                                    <p class="text-[10px] text-brand-text-secondary">Reduz fadiga visual e economiza bateria</p>
+                                </div>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
+                                <input type="checkbox" id="theme-toggle" class="sr-only peer">
+                                <div class="w-14 h-7 bg-brand-border peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold/50 rounded-full peer peer-checked:after:translate-x-7 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-brand-gold shadow-inner"></div>
+                            </label>
                         </div>
                     </div>
-                    
-                    <div class="flex items-center justify-between p-4 bg-brand-surface-light rounded-xl border border-brand-border hover:border-brand-gold/30 transition-all">
-                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-brand-gold/20 to-brand-gold/5 flex items-center justify-center">
-                                <svg class="w-6 h-6 text-brand-gold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <p class="text-sm font-bold text-brand-text-primary">Modo Escuro</p>
-                                <p class="text-xs text-brand-text-secondary">Reduz fadiga visual e economiza bateria</p>
-                            </div>
+                </div>
+
+                <!-- Tab Visibility Customization -->
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-purple-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"></span>
+                            Acesso às Abas
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Oculte recursos que não se alinham a sua organização no momento.</p>
+                        
+                        <div class="space-y-3" id="tab-visibility-container">
+                            ${this.renderTabToggles(profile.hidden_tabs || [])}
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="theme-toggle" class="sr-only peer">
-                            <div class="w-14 h-7 bg-brand-border peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold/50 rounded-full peer peer-checked:after:translate-x-7 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-brand-gold shadow-inner"></div>
-                        </label>
                     </div>
                 </div>
 
                 <!-- Pro-labore Automation -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border shadow-card-sm hover:shadow-md transition-shadow">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-4 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-green-500 rounded-full"></span>
-                        Pró-Labore Automático
-                    </h3>
-                    <p class="text-xs text-brand-text-secondary mb-4 leading-relaxed">
-                        O app irá criar automaticamente uma <strong>Saída na PJ</strong> e uma <strong>Entrada na PF</strong> todo mês.
-                    </p>
-                    <form id="profile-prolabore-form" class="space-y-4">
-                        <div class="flex gap-4">
-                            <div class="flex-1">
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Valor Mensal</label>
-                                <input type="text" name="pro_labore_amount" data-currency="true" value="${CurrencyMask.format(profile.pro_labore_amount ? (profile.pro_labore_amount * 100).toString() : '0')}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-green-500 outline-none">
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-green-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
+                            Pró-Labore Automático
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6 leading-relaxed">
+                            O app criará automaticamente uma <strong>Saída na PJ</strong> e uma <strong>Entrada na PF</strong> todo mês neste dia, usando o valor especificado.
+                        </p>
+                        
+                        <form id="profile-prolabore-form" class="grid grid-cols-3 gap-5">
+                            <div class="col-span-2 relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Valor Mensal (R$)</label>
+                                <input type="text" name="pro_labore_amount" data-currency="true" value="${CurrencyMask.format(profile.pro_labore_amount ? (profile.pro_labore_amount * 100).toString() : '0')}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500/50 outline-none transition-all font-bold tracking-widest text-right">
                             </div>
-                            <div class="w-1/3">
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Dia</label>
-                                <input type="number" min="1" max="31" name="pro_labore_day" value="${profile.pro_labore_day || 5}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-green-500 outline-none">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Dia</label>
+                                <input type="number" min="1" max="31" name="pro_labore_day" value="${profile.pro_labore_day || 5}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-green-500 focus:ring-1 focus:ring-green-500/50 outline-none transition-all font-bold tracking-widest text-center">
                             </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
+
+                <!-- Action Button -->
+                <button id="save-profile-btn" class="w-full bg-brand-gold text-brand-darker font-black py-5 rounded-2xl shadow-lg shadow-brand-gold/30 hover:shadow-brand-gold/50 hover:scale-[1.01] active:scale-[0.98] transition-all uppercase tracking-widest text-sm relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    <span class="relative z-10">Salvar Alterações de Perfil</span>
+                </button>
 
                 <!-- Danger Zone -->
-                <div class="bg-red-500/10 rounded-2xl p-5 border border-red-500/20">
-                    <h3 class="text-sm font-bold text-red-400 mb-2 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-red-500 rounded-full"></span>
-                        Zona de Perigo
-                    </h3>
-                    <p class="text-xs text-brand-text-secondary mb-4 leading-relaxed">
-                        Use apenas para testes. Esta ação é <strong class="text-red-400">IRREVERSÍVEL</strong>.
-                    </p>
-                    <button onclick="SettingsModule.clearAllData()" class="w-full bg-red-500/20 hover:bg-red-500/30 text-red-400 font-bold py-3 rounded-xl transition text-sm border border-red-500/30">
-                        🗑️ Limpar Todos os Dados de Teste
-                    </button>
+                <div class="bg-red-500/5 border border-red-500/20 rounded-3xl p-6 relative overflow-hidden mt-12">
+                     <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxMDAnIGhlaWdodD0nMTAwJz48cmVjdCB3aWR0aD0nMTAwJScgaGVpZ2h0PScxMDAlJyBmaWxsPSdub25lJy8+PGxpbmUgeDE9JzAnIHkxPScxMDAnIHgyPScxMDAnIHkyPScwJyBzdHJva2U9J3JnYmEoMjM5LCA2OCwgNjgsIDAuMSknIHN0cm9rZS13aWR0aD0nMicvPjwvc3ZnPg==')] opacity-50 z-0 pointer-events-none"></div>
+                     <div class="relative z-10 flex flex-col items-center">
+                        <div class="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center mb-3">
+                            <span class="text-xl">⚠️</span>
+                        </div>
+                        <h3 class="text-sm font-black text-red-500 uppercase tracking-widest mb-2">Zona de Perigo Extremo</h3>
+                        <p class="text-xs text-red-400/80 text-center mb-5 max-w-sm">Esta ação apagará absolutamente TODOS os dados da sua conta para recomeçar o sistema do zero. É <b>irreversível</b>.</p>
+                        
+                        <button onclick="SettingsModule.clearAllData()" class="px-8 bg-red-500/10 hover:bg-red-500 hover:text-white text-red-500 font-bold py-3 rounded-xl transition-all text-xs border border-red-500/30 uppercase tracking-widest shadow-lg shadow-red-500/10 hover:shadow-red-500/30 active:scale-95">
+                            Realizar Hard Reset
+                        </button>
+                     </div>
                 </div>
-
-                 <button id="save-profile-btn" class="w-full bg-brand-gold text-brand-darker font-bold py-4 rounded-xl shadow-lg shadow-brand-gold/20 active:scale-[0.98] transition">
-                    Salvar Alterações
-                </button>
             </div>
         `;
     },
 
     renderBankingTab() {
-        const accounts = SettingsService.accounts;
-        const cards = SettingsService.cards;
+        const accounts = SettingsService.accounts || [];
+        const cards = SettingsService.cards || [];
 
         return `
-            <div class="space-y-6 animate-fade-in">
+            <div class="space-y-8 flex-1 pb-10">
                  <!-- ACCOUNTS -->
-                <div class="bg-brand-surface rounded-2xl p-4 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-3">Contas Bancárias</h3>
-                    <form id="add-account-form" class="flex gap-2 mb-4">
-                         <input type="text" name="name" placeholder="Nome (ex: Itaú PJ)" class="flex-1 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-xs outline-none" required>
-                         <select name="type" class="w-24 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-xs outline-none">
-                            <option value="checking">Corrente</option>
-                            <option value="investment">Invest.</option>
-                         </select>
-                         <button type="submit" class="bg-brand-surface-light p-3 rounded-xl text-brand-text-primary font-bold">+</button>
-                    </form>
-
-                    <div class="space-y-2">
-                        ${accounts.map(a => `
-                            <div class="flex items-center justify-between p-3 bg-brand-bg rounded-xl border border-brand-border">
-                                <span class="text-xs text-brand-text-primary font-bold">${a.name}</span>
-                                <button class="text-red-400 text-xs" onclick="SettingsModule.deleteAccount('${a.id}')">Excluir</button>
+                 <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-blue-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span> Contas Bancárias
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Contas para vinculação às suas transações de entrada e saída.</p>
+                        
+                        <form id="add-account-form" class="flex gap-3 mb-6">
+                            <div class="flex-1 relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Nome da Instituição</label>
+                                <input type="text" name="name" placeholder="Ex: Itaú, Nubank PJ" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold" required>
                             </div>
-                        `).join('')}
+                            <div class="w-32 relative hidden md:block">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Tipo</label>
+                                <select name="type" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
+                                    <option value="checking">Corrente</option>
+                                    <option value="investment">Investimento</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-xl font-black shadow-lg shadow-blue-500/20 active:scale-95 transition-all text-sm w-14 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
+                            </button>
+                        </form>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            ${accounts.length === 0 ? '<p class="text-brand-text-secondary text-sm italic col-span-full">Nenhuma conta cadastrada.</p>' : ''}
+                            ${accounts.map(a => `
+                                <div class="group flex items-center justify-between p-4 bg-brand-surface-light/30 border border-brand-border/50 rounded-2xl hover:bg-brand-surface transition-all">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-brand-bg flex items-center justify-center text-xl shadow-inner border border-brand-border/30">
+                                            🏦
+                                        </div>
+                                        <div>
+                                            <p class="text-brand-text-primary font-bold text-sm select-all">${a.name}</p>
+                                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest">${a.type === 'investment' ? 'Investimentos' : 'Corrente'}</p>
+                                        </div>
+                                    </div>
+                                    <button class="opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-2.5 rounded-xl transition-all" onclick="SettingsModule.deleteAccount('${a.id}')">
+                                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 </div>
 
                  <!-- CARDS -->
-                <div class="bg-brand-surface rounded-2xl p-4 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-3">Cartões de Crédito</h3>
-                     <form id="add-card-form" class="space-y-3 mb-4">
-                         <input type="text" name="name" placeholder="Nome (ex: Inter Black)" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-xs outline-none" required>
-                         <div class="flex gap-2">
-                             <input type="number" name="closing_day" placeholder="Dia Fech." class="flex-1 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-xs outline-none" required>
-                             <input type="number" name="due_day" placeholder="Dia Venc." class="flex-1 bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-xs outline-none" required>
-                             <button type="submit" class="bg-brand-surface-light p-3 rounded-xl text-brand-text-primary font-bold w-12">+</button>
-                         </div>
-                    </form>
-
-                     <div class="space-y-2">
-                        ${cards.map(c => `
-                            <div class="flex items-center justify-between p-3 bg-brand-bg rounded-xl border border-brand-border">
-                                <div>
-                                    <p class="text-xs text-brand-text-primary font-bold">${c.name}</p>
-                                    <p class="text-[10px] text-brand-text-secondary">Fecha dia ${c.closing_day} • Vence dia ${c.due_day}</p>
-                                </div>
-                                <button class="text-red-400 text-xs" onclick="SettingsModule.deleteCard('${c.id}')">Excluir</button>
+                 <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-purple-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"></span> Cartões de Crédito
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Cartões usados para centralizar despesas no débito/crédito.</p>
+                        
+                        <form id="add-card-form" class="space-y-4 mb-6">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Nome do Cartão</label>
+                                <input type="text" name="name" placeholder="Ex: C6 Carbon" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold" required>
                             </div>
-                        `).join('')}
+                            <div class="flex gap-3">
+                                <div class="flex-1 relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Dia Fecha.</label>
+                                    <input type="number" min="1" max="31" name="closing_day" placeholder="Ex: 5" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all font-bold tracking-widest text-center" required>
+                                </div>
+                                <div class="flex-1 relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Dia Venc.</label>
+                                    <input type="number" min="1" max="31" name="due_day" placeholder="Ex: 10" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all font-bold tracking-widest text-center" required>
+                                </div>
+                                <button type="submit" class="bg-purple-500 hover:bg-purple-600 text-white p-4 rounded-xl font-black shadow-lg shadow-purple-500/20 active:scale-95 transition-all text-sm w-14 flex items-center justify-center">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"/></svg>
+                                </button>
+                            </div>
+                        </form>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            ${cards.length === 0 ? '<p class="text-brand-text-secondary text-sm italic col-span-full">Nenhum cartão cadastrado.</p>' : ''}
+                            ${cards.map(c => `
+                                <div class="group relative p-5 bg-gradient-to-br from-brand-surface-light border border-brand-border/50 rounded-2xl overflow-hidden hover:scale-[1.02] hover:shadow-xl hover:shadow-purple-500/5 transition-all">
+                                    <!-- Card design elements -->
+                                    <div class="absolute -right-4 -top-8 w-24 h-24 bg-brand-gold/10 rounded-full blur-2xl"></div>
+                                    <div class="absolute -left-4 -bottom-8 w-24 h-24 bg-purple-500/10 rounded-full blur-xl"></div>
+                                    <div class="absolute top-4 right-5 opacity-40">
+                                        <svg width="30" height="20" viewBox="0 0 40 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12" fill="#eb001b"/><circle cx="28" cy="12" r="12" fill="#f79e1b" fill-opacity="0.8"/></svg>
+                                    </div>
+                                    
+                                    <div class="relative z-10 flex flex-col justify-between h-full min-h-[5rem]">
+                                        <div class="flex justify-between items-start">
+                                            <div>
+                                                <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest mb-1 opacity-80">Cartão de Crédito</p>
+                                                <p class="text-brand-text-primary text-base font-black tracking-wide">${c.name}</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="flex justify-between items-end mt-4">
+                                            <div class="flex gap-4">
+                                                <div>
+                                                    <p class="text-[9px] text-brand-text-secondary uppercase">Fecha</p>
+                                                    <p class="text-xs font-bold text-brand-text-primary">Dia ${c.closing_day}</p>
+                                                </div>
+                                                <div>
+                                                    <p class="text-[9px] text-brand-text-secondary uppercase">Vence</p>
+                                                    <p class="text-xs font-bold text-brand-text-primary">Dia ${c.due_day}</p>
+                                                </div>
+                                            </div>
+                                            <button class="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100" onclick="SettingsModule.deleteCard('${c.id}')">
+                                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -331,58 +453,70 @@ export const SettingsModule = {
 
     renderParamsTab(profile) {
         return `
-             <div class="space-y-6 animate-fade-in">
+             <div class="space-y-8 flex-1 pb-10">
                 <!-- Investment Params -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-4 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-purple-500 rounded-full"></span>
-                        Investimentos
-                    </h3>
-                    <form id="profile-params-form" class="space-y-4">
-                        <div>
-                            <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Perfil de Risco (Suitability)</label>
-                            <select name="risk_profile" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                <option value="conservative" ${profile.risk_profile === 'conservative' ? 'selected' : ''}>Conservador</option>
-                                <option value="moderate" ${profile.risk_profile === 'moderate' ? 'selected' : ''}>Moderado</option>
-                                <option value="bold" ${profile.risk_profile === 'bold' ? 'selected' : ''}>Arrojado</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Indexador de Referência</label>
-                            <select name="benchmark_index" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                <option value="cdi" ${profile.benchmark_index === 'cdi' ? 'selected' : ''}>CDI (100%)</option>
-                                <option value="ipca" ${profile.benchmark_index === 'ipca' ? 'selected' : ''}>IPCA</option>
-                                <option value="ibov" ${profile.benchmark_index === 'ibov' ? 'selected' : ''}>Ibovespa</option>
-                            </select>
-                        </div>
-                    </form>
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-purple-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"></span>
+                            Perfil de Investimento
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Personaliza a rentabilidade e alocações recomendadas dos seus ativos.</p>
+                        
+                        <form id="profile-params-form" class="space-y-5">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Suitability</label>
+                                    <select name="risk_profile" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
+                                        <option value="conservative" ${profile.risk_profile === 'conservative' ? 'selected' : ''}>Conservador 🛡️</option>
+                                        <option value="moderate" ${profile.risk_profile === 'moderate' ? 'selected' : ''}>Moderado ⚖️</option>
+                                        <option value="bold" ${profile.risk_profile === 'bold' ? 'selected' : ''}>Arrojado 🚀</option>
+                                    </select>
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Indexador Principal</label>
+                                    <select name="benchmark_index" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
+                                        <option value="cdi" ${profile.benchmark_index === 'cdi' ? 'selected' : ''}>CDI (100%)</option>
+                                        <option value="ipca" ${profile.benchmark_index === 'ipca' ? 'selected' : ''}>IPCA</option>
+                                        <option value="ibov" ${profile.benchmark_index === 'ibov' ? 'selected' : ''}>Ibovespa</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
                 </div>
 
                 <!-- Emergency Fund -->
-                 <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-4 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-orange-500 rounded-full"></span>
-                        Reserva de Emergência (Metas)
-                    </h3>
-                    <p class="text-xs text-brand-text-secondary mb-4 leading-relaxed">
-                        Quantos meses do seu Custo de Vida você quer guardar?
-                    </p>
-                    <form id="profile-emergency-form" class="space-y-4">
-                        <div class="flex gap-4">
-                             <div class="flex-1">
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Meses (PF)</label>
-                                <input type="number" name="emergency_fund_months_pf" value="${profile.emergency_fund_months_pf || 6}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-orange-500 outline-none">
+                 <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-orange-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]"></span>
+                            Estrutura de Reserva
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6 leading-relaxed">
+                            Quantos meses do seu Custo de Vida formam a sua Reserva de Emergência?
+                        </p>
+                        <form id="profile-emergency-form" class="grid grid-cols-2 gap-5">
+                             <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Meses (PF)</label>
+                                <input type="number" min="1" max="24" name="emergency_fund_months_pf" value="${profile.emergency_fund_months_pf || 6}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 outline-none transition-all font-bold tracking-widest text-center" required>
+                                <span class="absolute inset-y-0 right-4 flex items-center text-xs text-brand-text-secondary font-bold select-none pointer-events-none">meses</span>
                             </div>
-                            <div class="flex-1">
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Meses (PJ)</label>
-                                <input type="number" name="emergency_fund_months_pj" value="${profile.emergency_fund_months_pj || 12}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm focus:border-orange-500 outline-none">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Meses (PJ)</label>
+                                <input type="number" min="1" max="24" name="emergency_fund_months_pj" value="${profile.emergency_fund_months_pj || 12}" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 outline-none transition-all font-bold tracking-widest text-center" required>
+                                <span class="absolute inset-y-0 right-4 flex items-center text-xs text-brand-text-secondary font-bold select-none pointer-events-none">meses</span>
                             </div>
-                        </div>
-                    </form>
+                        </form>
+                    </div>
                 </div>
                 
-                <button onclick="SettingsModule.saveProfile()" class="w-full bg-brand-gold text-brand-darker font-bold py-4 rounded-xl shadow-lg shadow-brand-gold/20 active:scale-[0.98] transition">
-                    Salvar Parâmetros
+                <!-- Action Button -->
+                <button onclick="SettingsModule.saveProfile()" class="w-full bg-brand-gold text-brand-darker font-black py-5 rounded-2xl shadow-lg shadow-brand-gold/30 hover:shadow-brand-gold/50 hover:scale-[1.01] active:scale-[0.98] transition-all uppercase tracking-widest text-sm relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    <span class="relative z-10">Salvar Parâmetros</span>
                 </button>
             </div>
         `;
@@ -634,114 +768,130 @@ export const SettingsModule = {
         const pfItems = list.filter(i => i.context === 'personal');
 
         return `
-            <div class="space-y-6 animate-fade-in">
+            <div class="space-y-8 flex-1 pb-10 animate-fade-in relative z-0">
                 <!-- Add Form -->
-                <div class="bg-brand-surface rounded-2xl p-5 border border-brand-border">
-                    <h3 class="text-sm font-bold text-brand-text-primary mb-4 flex items-center gap-2">
-                        <span class="w-1 h-4 bg-blue-500 rounded-full"></span>
-                        Nova Recorrência
-                    </h3>
-                    <form id="add-recurring-form" class="space-y-3">
-                        <input type="text" name="description" placeholder="Descrição (ex: Netflix, Aluguel)" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none focus:border-blue-500" required>
+                <div class="bg-brand-surface border border-brand-border/50 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl -mr-10 -mt-10 transition-colors group-hover:bg-blue-500/10"></div>
+                    <div class="relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary mb-1 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></span>
+                            Nova Recorrência
+                        </h3>
+                        <p class="text-xs text-brand-text-secondary mb-6">Cadastre assinaturas, mensalidades e receitas previsíveis.</p>
                         
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Valor (R$)</label>
-                                <input type="text" name="amount" data-currency="true" placeholder="R$ 0,00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none focus:border-blue-500" required>
+                        <form id="add-recurring-form" class="space-y-5">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Descrição</label>
+                                <input type="text" name="description" placeholder="Ex: Netflix, Conta de Luz" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold" required>
                             </div>
-                            <div>
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Dia do Mês</label>
-                                <input type="number" min="1" max="31" name="day_of_month" placeholder="1-31" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none focus:border-blue-500" required>
+                            
+                            <div class="grid grid-cols-2 gap-5">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Valor (R$)</label>
+                                    <input type="text" name="amount" data-currency="true" placeholder="R$ 0,00" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold tracking-widest text-right" required>
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Dia do Mês</label>
+                                    <input type="number" min="1" max="31" name="day_of_month" placeholder="1-31" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold tracking-widest text-center" required>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Tipo</label>
-                                <select name="type" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                    <option value="expense">💸 Despesa</option>
-                                    <option value="income">💰 Receita</option>
-                                </select>
+                            <div class="grid grid-cols-2 gap-5">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Tipo</label>
+                                    <select name="type" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
+                                        <option value="expense">🔴 Despesa</option>
+                                        <option value="income">🟢 Receita</option>
+                                    </select>
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-bold text-brand-text-secondary z-10">Contexto</label>
+                                    <select name="context" class="w-full bg-brand-bg rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
+                                        <option value="personal">👤 Pessoal (PF)</option>
+                                        <option value="business">💼 Empresa (PJ)</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div>
-                                <label class="block text-[10px] text-brand-text-secondary font-bold uppercase mb-1">Contexto</label>
-                                <select name="context" class="w-full bg-brand-bg rounded-xl border border-brand-border p-3 text-brand-text-primary text-sm outline-none">
-                                    <option value="personal">👤 Pessoal (PF)</option>
-                                    <option value="business">💼 Empresa (PJ)</option>
-                                </select>
-                            </div>
-                        </div>
 
-                        <button type="submit" class="w-full bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 font-bold py-3 rounded-xl transition text-sm border border-blue-500/30">
-                            + Adicionar Recorrência
-                        </button>
-                    </form>
+                            <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg shadow-blue-500/20 active:scale-95 transition-all uppercase tracking-widest text-sm relative overflow-hidden group mt-2">
+                                + Adicionar Recorrência
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
-                <!-- PJ List -->
-                ${pjItems.length > 0 ? `
-                    <div>
-                        <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <span class="w-6 h-6 bg-purple-500/20 rounded-lg flex items-center justify-center text-purple-400 text-xs">💼</span>
-                            Empresa (PJ) • ${pjItems.length} recorrência${pjItems.length !== 1 ? 's' : ''}
-                        </h3>
-                        <div class="space-y-2">
-                            ${pjItems.map(item => this.renderRecurringItem(item)).join('')}
+                <!-- Lists -->
+                <div class="space-y-8 relative z-10">
+                    <!-- PJ List -->
+                    ${pjItems.length > 0 ? `
+                        <div>
+                            <h3 class="text-xs font-black text-brand-text-secondary uppercase tracking-widest mb-4 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-brand-border/50">
+                                    <span class="text-white text-sm">💼</span>
+                                </div>
+                                Empresa (PJ) <span class="text-[10px] bg-brand-surface-light px-2 py-0.5 rounded-full font-medium ml-1">${pjItems.length}</span>
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                ${pjItems.map(item => this.renderRecurringItem(item)).join('')}
+                            </div>
                         </div>
-                    </div>
-                ` : ''}
+                    ` : ''}
 
-                <!-- PF List -->
-                ${pfItems.length > 0 ? `
-                    <div>
-                        <h3 class="text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <span class="w-6 h-6 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 text-xs">👤</span>
-                            Pessoal (PF) • ${pfItems.length} recorrência${pfItems.length !== 1 ? 's' : ''}
-                        </h3>
-                        <div class="space-y-2">
-                            ${pfItems.map(item => this.renderRecurringItem(item)).join('')}
+                    <!-- PF List -->
+                    ${pfItems.length > 0 ? `
+                        <div>
+                            <h3 class="text-xs font-black text-brand-text-secondary uppercase tracking-widest mb-4 flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-brand-border/50">
+                                    <span class="text-white text-sm">👤</span>
+                                </div>
+                                Pessoal (PF) <span class="text-[10px] bg-brand-surface-light px-2 py-0.5 rounded-full font-medium ml-1">${pfItems.length}</span>
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                ${pfItems.map(item => this.renderRecurringItem(item)).join('')}
+                            </div>
                         </div>
-                    </div>
-                ` : ''}
+                    ` : ''}
 
-                ${list.length === 0 ? `
-                    <div class="text-center py-12">
-                        <div class="w-16 h-16 bg-brand-surface-light rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg class="w-8 h-8 text-brand-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                            </svg>
+                    ${list.length === 0 ? `
+                        <div class="text-center py-16 bg-brand-surface-light/30 border border-brand-border/50 rounded-3xl border-dashed">
+                            <div class="w-20 h-20 bg-brand-bg rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner">
+                                <span class="text-3xl">📅</span>
+                            </div>
+                            <h3 class="text-brand-text-primary text-lg font-black mb-2">Nenhuma recorrência</h3>
+                            <p class="text-brand-text-secondary text-sm max-w-xs mx-auto">Adicione assinaturas, aluguéis e outras despesas ou receitas fixas para automatizar seu fluxo de caixa.</p>
                         </div>
-                        <p class="text-brand-text-secondary text-sm font-medium">Nenhuma recorrência cadastrada</p>
-                        <p class="text-gray-600 text-xs mt-1">Adicione assinaturas, aluguéis e outras despesas/receitas fixas</p>
-                    </div>
-                ` : ''}
+                    ` : ''}
+                </div>
             </div>
         `;
     },
 
     renderRecurringItem(item) {
         const isExpense = item.type === 'expense';
-        const typeIcon = isExpense ? '💸' : '💰';
-        const typeColor = isExpense ? 'text-red-400' : 'text-green-400';
+        const typeIcon = isExpense ? '🔴' : '🟢';
         const amount = parseFloat(item.amount) / 100; // Convert from cents
+        const amountFormatted = amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
         return `
-            <div class="flex items-center justify-between p-4 bg-brand-surface/50 rounded-xl border border-brand-border hover:border-brand-border transition">
-                <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-sm">${typeIcon}</span>
-                        <p class="text-brand-text-primary font-bold text-sm">${item.description}</p>
-                        ${!item.active ? '<span class="text-[10px] bg-gray-500/20 text-brand-text-secondary px-2 py-0.5 rounded-full">Inativa</span>' : ''}
+            <div class="group flex items-center justify-between p-4 bg-brand-surface-light/30 border border-brand-border/50 rounded-2xl hover:bg-brand-surface hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-brand-bg outline outline-1 outline-brand-border flex items-center justify-center text-lg shadow-inner relative overflow-hidden">
+                        ${typeIcon}
+                        <div class="absolute bottom-0 inset-x-0 h-1 ${isExpense ? 'bg-red-500/30' : 'bg-green-500/30'}"></div>
                     </div>
-                    <div class="flex items-center gap-3 text-[10px] text-brand-text-secondary">
-                        <span>📅 Todo dia ${item.day_of_month}</span>
-                        <span class="${typeColor} font-bold">R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <div>
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <p class="text-brand-text-primary font-bold text-sm truncate max-w-[150px] md:max-w-[200px]" title="${item.description}">${item.description}</p>
+                            ${!item.active ? '<span class="text-[9px] bg-brand-border text-brand-text-secondary px-2 py-0.5 rounded-full font-bold tracking-wider">INATIVA</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-2 text-[10px]">
+                            <span class="bg-brand-surface px-1.5 py-0.5 rounded border border-brand-border/50 text-brand-text-secondary font-bold font-mono">D${item.day_of_month.toString().padStart(2, '0')}</span>
+                            <span class="${isExpense ? 'text-red-400' : 'text-green-400'} font-bold tracking-widest text-xs">R$ ${amountFormatted}</span>
+                        </div>
                     </div>
                 </div>
-                <button class="text-red-400 hover:text-red-300 p-2 transition" onclick="SettingsModule.deleteRecurring('${item.id}')">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                <button class="opacity-0 group-hover:opacity-100 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white p-2.5 rounded-xl transition-all" onclick="SettingsModule.deleteRecurring('${item.id}')" title="Excluir">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                 </button>
             </div>
         `;
@@ -770,25 +920,31 @@ export const SettingsModule = {
             overlay.style.zIndex = '9999';
 
             overlay.innerHTML = `
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity"></div>
-                <div class="relative w-full max-w-md bg-brand-surface border border-brand-border rounded-2xl shadow-2xl animate-scale-in overflow-hidden flex flex-col">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity"></div>
+                <div class="relative w-full max-w-sm bg-brand-surface md:border md:border-brand-border/60 rounded-[2rem] shadow-2xl animate-scale-in overflow-hidden flex flex-col mx-4 origin-bottom md:origin-center">
+                    
+                    <!-- Decorative line -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent"></div>
                     
                     <!-- Header -->
-                    <div class="p-6 pb-4 border-b border-brand-border shrink-0">
-                        <h3 class="text-xl font-bold text-brand-text-primary">${title}</h3>
+                    <div class="p-6 pb-4 border-b border-brand-border/50 shrink-0 text-center relative z-10">
+                        <div class="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <span class="text-red-500 text-2xl">⚠️</span>
+                        </div>
+                        <h3 class="text-xl font-black text-brand-text-primary tracking-tight">${title}</h3>
                     </div>
 
                     <!-- Body -->
-                    <div class="p-6 overflow-y-auto max-h-[60vh] custom-scrollbar">
-                        <p class="text-brand-text-secondary whitespace-pre-line leading-relaxed">${message}</p>
+                    <div class="p-6 overflow-y-auto max-h-[60vh] custom-scrollbar text-center relative z-10">
+                        <p class="text-sm text-brand-text-secondary whitespace-pre-line leading-relaxed font-bold">${message}</p>
                     </div>
 
                     <!-- Footer -->
-                    <div class="p-6 border-t border-brand-border bg-brand-surface shrink-0 flex gap-3">
-                        <button id="confirm-modal-cancel" class="flex-1 py-3 px-4 rounded-xl bg-brand-bg text-brand-text-secondary font-medium hover:bg-brand-surface-light transition">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-bg/50 shrink-0 flex gap-3 relative z-10">
+                        <button id="confirm-modal-cancel" class="flex-1 py-3.5 px-4 rounded-xl bg-brand-surface border border-brand-border/50 text-brand-text-primary font-black text-xs uppercase tracking-widest hover:bg-brand-surface-light transition-all active:scale-95">
                             Cancelar
                         </button>
-                        <button id="confirm-modal-confirm" class="flex-1 py-3 px-4 rounded-xl bg-red-500 text-white font-bold hover:bg-red-600 transition shadow-lg shadow-red-500/20">
+                        <button id="confirm-modal-confirm" class="flex-1 py-3.5 px-4 rounded-xl bg-red-500 text-white font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/25 active:scale-95">
                             Confirmar
                         </button>
                     </div>
@@ -909,12 +1065,11 @@ export const SettingsModule = {
 
     renderTabToggles(hiddenTabs = []) {
         const allTabs = [
-            { id: 'dashboard', icon: '', label: 'Dashboard', canHide: false },
-            { id: 'wallet', icon: '', label: 'Carteira', canHide: true },
-            { id: 'goals', icon: '', label: 'Metas', canHide: true },
-            { id: 'reports', icon: '', label: 'Relatórios', canHide: true },
-            { id: 'investments', icon: '', label: 'Investimentos', canHide: true },
-            { id: 'settings', icon: '', label: 'Configurações', canHide: false }
+            { id: 'dashboard', icon: '📊', label: 'Dashboard', canHide: false, desc: 'Visão geral das finanças' },
+            { id: 'wallet', icon: '💰', label: 'Carteira', canHide: true, desc: 'Gestão de contas e cartões' },
+            { id: 'goals', icon: '🎯', label: 'Metas', canHide: true, desc: 'Acompanhamento de objetivos' },
+            { id: 'investments', icon: '📈', label: 'Investimentos', canHide: true, desc: 'Carteira de ativos e aportes' },
+            { id: 'settings', icon: '⚙️', label: 'Configurações', canHide: false, desc: 'Ajustes do sistema' }
         ];
 
         return allTabs.map(tab => {
@@ -922,20 +1077,35 @@ export const SettingsModule = {
             const isChecked = !isHidden; // Checkbox is for "visible", not "hidden"
 
             return `
-                <label class="flex items-center justify-between p-3 bg-brand-surface-light rounded-xl cursor-pointer hover:bg-brand-surface-light transition ${!tab.canHide ? 'opacity-50 cursor-not-allowed' : ''}">
-                    <div class="flex items-center gap-3">
-                        <span class="text-2xl">${tab.icon}</span>
-                        <span class="text-sm font-medium text-brand-text-primary">${tab.label}</span>
-                        ${!tab.canHide ? '<span class="text-[9px] bg-gray-500/20 text-brand-text-secondary px-2 py-0.5 rounded ml-2">Obrigatório</span>' : ''}
+                <div class="flex items-center justify-between p-4 bg-brand-surface-light/30 border border-brand-border/50 rounded-2xl hover:bg-brand-surface transition-all ${!tab.canHide ? 'opacity-70' : 'cursor-pointer'}" ${tab.canHide ? `onclick="const cb = this.querySelector('input[type=checkbox]'); cb.click();"` : ''}>
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-full bg-brand-bg flex items-center justify-center text-xl shadow-inner border border-brand-border/30">
+                            ${tab.icon}
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 mb-0.5">
+                                <p class="text-sm font-bold text-brand-text-primary tracking-wide">${tab.label}</p>
+                                ${!tab.canHide ? '<span class="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded-full font-bold tracking-widest uppercase">Fixa</span>' : ''}
+                            </div>
+                            <p class="text-[10px] text-brand-text-secondary">${tab.desc}</p>
+                        </div>
                     </div>
-                    <input 
-                        type="checkbox" 
-                        class="toggle-tab w-5 h-5 rounded accent-brand-gold" 
-                        data-tab="${tab.id}" 
-                        ${isChecked ? 'checked' : ''}
-                        ${!tab.canHide ? 'disabled' : ''}
-                    >
-                </label>
+                    <label class="relative inline-flex items-center ${tab.canHide ? 'cursor-pointer' : 'cursor-not-allowed hidden'}" onclick="event.stopPropagation()">
+                        <input 
+                            type="checkbox" 
+                            class="toggle-tab sr-only peer" 
+                            data-tab="${tab.id}" 
+                            ${isChecked ? 'checked' : ''}
+                            ${!tab.canHide ? 'disabled' : ''}
+                        >
+                        <div class="w-14 h-7 bg-brand-border peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-gold/50 rounded-full peer peer-checked:after:translate-x-7 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-brand-gold shadow-inner"></div>
+                    </label>
+                    ${!tab.canHide ? `
+                        <div class="text-brand-gold opacity-50 pr-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                        </div>
+                    ` : ''}
+                </div>
             `;
         }).join('');
     },

@@ -8,7 +8,8 @@ import { CategoryBudgetService } from '../services/category_budgets.service.js';
 import { CreditCardService } from '../services/credit-card.service.js';
 import { Money } from '../utils/money.js';
 import { createElement, clearElement } from '../utils/dom.js';
-import Chart from 'chart.js/auto';
+import { Chart } from 'chart.js/auto';
+import Tesseract from 'tesseract.js';
 
 export const WalletModule = {
     state: {
@@ -81,6 +82,19 @@ export const WalletModule = {
                     <h1 class="text-2xl font-bold text-brand-text-primary leading-none mt-1">Carteira</h1>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button onclick="window.app.navigateTo('reports')" class="flex items-center gap-2 px-3 py-1.5 bg-brand-surface-light text-blue-500 hover:bg-white/10 rounded-lg text-xs font-bold transition border border-brand-border">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        <span class="hidden sm:inline text-brand-text-primary">Relatórios</span>
+                    </button>
+                    <button id="importStatementBtn" class="flex items-center gap-2 px-3 py-1.5 bg-brand-surface-light hover:bg-white/10 rounded-lg text-xs font-bold text-brand-text-primary transition border border-brand-border">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span class="hidden sm:inline">Importar Extrato</span>
+                    </button>
+                    <input type="file" id="statementFileInput" class="hidden" accept="image/*">
                     <button onclick="window.app.togglePrivacy()" class="text-brand-text-secondary hover:text-brand-text-primary transition">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -141,18 +155,26 @@ export const WalletModule = {
                     </div>
 
                     <div id="filterTabsContainer" class="flex gap-2 overflow-x-auto scrollbar-hide">
-                        <button class="filter-tab active px-4 py-2 rounded-full text-xs font-bold bg-brand-surface-light text-brand-text-primary whitespace-nowrap border border-brand-border transition hover:bg-white/20" data-type="all">Todos</button>
-                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-green/10 text-brand-green whitespace-nowrap border border-brand-green/20 transition hover:bg-brand-green/20" data-type="income">Entradas</button>
-                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-brand-red/10 text-brand-red whitespace-nowrap border border-brand-red/20 transition hover:bg-brand-red/20" data-type="expense">Saídas</button>
-                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 whitespace-nowrap border border-blue-500/20 transition hover:bg-blue-500/20" data-context="personal">👤 PF</button>
-                        <button class="filter-tab px-4 py-2 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 whitespace-nowrap border border-purple-500/20 transition hover:bg-purple-500/20" data-context="business">💼 PJ</button>
+                        <button class="filter-tab active px-5 py-3 rounded-full text-xs font-bold bg-brand-surface-light text-brand-text-primary whitespace-nowrap border border-brand-border transition-all active:scale-95 hover:bg-white/20" data-type="all">Todos</button>
+                        <button class="filter-tab px-5 py-3 rounded-full text-xs font-bold bg-brand-green/10 text-brand-green whitespace-nowrap border border-brand-green/20 transition-all active:scale-95 hover:bg-brand-green/20" data-type="income">Entradas</button>
+                        <button class="filter-tab px-5 py-3 rounded-full text-xs font-bold bg-brand-red/10 text-brand-red whitespace-nowrap border border-brand-red/20 transition-all active:scale-95 hover:bg-brand-red/20" data-type="expense">Saídas</button>
+                        <button class="filter-tab px-5 py-3 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 whitespace-nowrap border border-blue-500/20 transition-all active:scale-95 hover:bg-blue-500/20" data-context="personal">👤 PF</button>
+                        <button class="filter-tab px-5 py-3 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 whitespace-nowrap border border-purple-500/20 transition-all active:scale-95 hover:bg-purple-500/20" data-context="business">💼 PJ</button>
                     </div>
                 </div>
 
                 <!-- WALLET SUMMARY CHARTS -->
                 <div id="walletSummaryCharts" class="px-6 py-4 space-y-4">
                     <!-- Quick Stats Cards -->
-                    <div class="grid grid-cols-3 gap-3">
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div class="bg-brand-surface rounded-xl p-3 text-center border border-brand-border">
+                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Saldo Atual</p>
+                            <p id="walletNetBalance" class="text-lg font-black text-brand-primary value-sensitive">R$ 0</p>
+                        </div>
+                        <div class="bg-brand-gold/10 rounded-xl p-3 text-center border border-brand-gold/20">
+                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Projetado (Fim do Mês)</p>
+                            <p id="walletProjectedBalance" class="text-lg font-black text-brand-gold value-sensitive">R$ 0</p>
+                        </div>
                         <div class="bg-brand-green/10 rounded-xl p-3 text-center border border-brand-green/20">
                             <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Receitas</p>
                             <p id="walletTotalIncome" class="text-lg font-black text-brand-green value-sensitive">R$ 0</p>
@@ -160,10 +182,6 @@ export const WalletModule = {
                         <div class="bg-brand-red/10 rounded-xl p-3 text-center border border-brand-red/20">
                             <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Despesas</p>
                             <p id="walletTotalExpenses" class="text-lg font-black text-brand-red value-sensitive">R$ 0</p>
-                        </div>
-                        <div class="bg-brand-gold/10 rounded-xl p-3 text-center border border-brand-gold/20">
-                            <p class="text-[10px] text-brand-text-secondary uppercase font-bold tracking-wide">Saldo</p>
-                            <p id="walletNetBalance" class="text-lg font-black text-brand-gold value-sensitive">R$ 0</p>
                         </div>
                     </div>
                     <!-- Charts Row -->
@@ -201,7 +219,7 @@ export const WalletModule = {
                 </div>
 
                 <!-- FAB ADD BUTTON -->
-                <button id="addTransactionBtn" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-green rounded-full shadow-glow-green text-brand-text-primary flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition z-30">
+                <button id="addTransactionBtn" class="fixed bottom-24 right-6 w-14 h-14 bg-brand-green rounded-full shadow-[0_4px_20px_-4px_rgba(16,185,129,0.6)] text-white flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition-all duration-300 z-30">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -210,115 +228,157 @@ export const WalletModule = {
 
             <!-- MODAL TRANSACTION -->
             <div id="transactionModal" class="fixed inset-0 hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity" onclick="window.app.WalletModule ? window.app.WalletModule.closeTransactionModal() : null"></div>
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="window.app.WalletModule ? window.app.WalletModule.closeTransactionModal() : null"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl md:border p-0 shadow-2xl max-h-[92vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in overflow-hidden">
                     
+                    <!-- Decorative top accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-green/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-green/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile Only) -->
-                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
 
                     <!-- Header (Fixed) -->
-                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
-                        <h3 class="modal-title text-xl font-bold text-brand-text-primary">Nova Transação</h3>
-                        <button onclick="window.app.WalletModule.closeTransactionModal()" class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition">
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
+                        <div>
+                            <h3 class="modal-title text-lg font-black text-brand-text-primary tracking-tight">Nova Transação</h3>
+                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest font-bold mt-0.5 opacity-70">Registre entradas e saídas</p>
+                        </div>
+                        <button onclick="window.app.WalletModule.closeTransactionModal()" class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
                         </button>
                     </div>
 
                     <!-- Body (Scrollable) -->
-                    <form id="transactionForm" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                        <div class="bg-[#27272a] rounded-xl p-4">
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
-                            <input type="text" inputmode="numeric" id="amountInput" name="amount" data-currency required class="w-full bg-transparent text-4xl font-black text-white border-0 p-0 focus:ring-0 placeholder-gray-500" placeholder="R$ 0,00">
+                    <form id="transactionForm" class="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar relative z-10">
+                        <!-- Amount Block -->
+                        <div class="bg-brand-bg rounded-2xl p-5 border border-brand-border/50 relative overflow-hidden">
+                            <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-3">Valor</label>
+                            <input type="text" inputmode="numeric" id="amountInput" name="amount" data-currency required 
+                                class="w-full bg-transparent text-4xl font-black text-brand-text-primary border-0 p-0 focus:ring-0 placeholder-brand-text-secondary/25 outline-none" 
+                                placeholder="R$ 0,00">
                         </div>
 
+                        <!-- Type Selector -->
                         <div class="grid grid-cols-2 gap-3">
-                            <label class="p-3 rounded-xl bg-brand-surface-light border border-brand-border flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-green/20 has-[:checked]:border-brand-green/50 transition">
+                            <label class="p-4 rounded-2xl bg-brand-surface-light/50 border border-brand-border/50 flex items-center justify-center gap-2.5 cursor-pointer has-[:checked]:bg-brand-green/15 has-[:checked]:border-brand-green/40 transition-all group">
                                 <input type="radio" name="type" value="income" class="hidden">
-                                    <span class="text-sm font-bold text-brand-text-primary">Entrada</span>
+                                <div class="w-2 h-2 rounded-full bg-brand-green opacity-0 group-has-[:checked]:opacity-100 transition-all"></div>
+                                <span class="text-sm font-bold text-brand-text-secondary group-has-[:checked]:text-brand-green transition-all">💰 Entrada</span>
                             </label>
-                            <label class="p-3 rounded-xl bg-brand-surface-light border border-brand-border flex items-center justify-center gap-2 cursor-pointer has-[:checked]:bg-brand-red/20 has-[:checked]:border-brand-red/50 transition">
+                            <label class="p-4 rounded-2xl bg-brand-surface-light/50 border border-brand-border/50 flex items-center justify-center gap-2.5 cursor-pointer has-[:checked]:bg-red-500/15 has-[:checked]:border-red-500/40 transition-all group">
                                 <input type="radio" name="type" value="expense" class="hidden" checked>
-                                    <span class="text-sm font-bold text-brand-text-primary">Saída</span>
+                                <div class="w-2 h-2 rounded-full bg-red-500 opacity-0 group-has-[:checked]:opacity-100 transition-all"></div>
+                                <span class="text-sm font-bold text-brand-text-secondary group-has-[:checked]:text-red-400 transition-all">💸 Saída</span>
                             </label>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Descrição</label>
-                            <input type="text" name="description" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: Supermercado">
+                        <!-- Description -->
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Descrição</label>
+                            <input type="text" name="description" required 
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all placeholder:text-brand-text-secondary/30 font-bold" 
+                                placeholder="Ex: Supermercado, Salário...">
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
-                            <select id="transactionContext" name="context" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                        <!-- Context -->
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Classificação</label>
+                            <select id="transactionContext" name="context" required 
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
                                 <option value="personal">👤 Pessoal (PF)</option>
                                 <option value="business">💼 Empresa (PJ)</option>
                             </select>
-                            <p class="text-xs text-brand-text-secondary mt-2">Separe despesas pessoais e empresariais</p>
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Categoria</label>
-                            <select id="transactionCategory" name="categoryId" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                        <!-- Category -->
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Categoria</label>
+                            <select id="transactionCategory" name="categoryId" required 
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
                                 <option value="">Carregando...</option>
                             </select>
-                            
-
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data da Compra</label>
-                            <input type="date" name="date" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none scheme-dark">
+                        <!-- Date -->
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Data da Compra</label>
+                            <input type="date" name="date" required 
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold scheme-dark">
                         </div>
 
-                        <div>
-                            <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Conta</label>
-                            <select id="transactionAccount" name="account_id" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none">
+                        <!-- Account -->
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Conta</label>
+                            <select id="transactionAccount" name="account_id" required 
+                                class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-12">
                                 <option value="">Carregando contas...</option>
                             </select>
-                            <p class="text-xs text-brand-text-secondary mt-2">Selecione de onde o dinheiro saiu/entrou</p>
                         </div>
 
-
-
                         <!-- RECURRING TOGGLE -->
-                        <div class="bg-brand-surface-light rounded-xl p-4 border border-brand-border">
-                            <label class="flex items-center justify-between cursor-pointer">
-                                <span class="text-sm font-bold text-brand-text-secondary">Repetir Mensalmente?</span>
-                                <div class="relative inline-flex items-center cursor-pointer">
+                        <div class="bg-brand-bg rounded-2xl p-4 border border-brand-border/50">
+                            <label class="flex items-center justify-between cursor-pointer" onclick="event.preventDefault(); document.getElementById('isRecurringInput').click()">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-xl bg-brand-surface flex items-center justify-center">
+                                        <span class="text-base">🔄</span>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-brand-text-primary">Repetir Mensalmente?</p>
+                                        <p class="text-[10px] text-brand-text-secondary">Cria automaticamente todo mês</p>
+                                    </div>
+                                </div>
+                                <div class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
                                     <input type="checkbox" name="isRecurring" id="isRecurringInput" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-brand-surface-light rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
+                                    <div class="w-12 h-6 bg-brand-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
                                 </div>
                             </label>
 
-                            <div id="recurringOptions" class="hidden mt-4 pt-4 border-t border-brand-border animate-fade-in">
-                                <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Dia do Vencimento</label>
-                                <input type="number" name="day_of_month" min="1" max="31" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 5">
-                                    <p class="text-xs text-brand-text-secondary mt-2">Será gerado automaticamente todo mês neste dia.</p>
+                            <div id="recurringOptions" class="hidden mt-4 pt-4 border-t border-brand-border/50 animate-fade-in">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-bg px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Dia do Vencimento</label>
+                                    <input type="number" name="day_of_month" min="1" max="31" 
+                                        class="w-full bg-brand-surface rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold text-center" 
+                                        placeholder="Ex: 5">
+                                </div>
+                                <p class="text-[10px] text-brand-text-secondary mt-2">Será gerado automaticamente todo mês neste dia.</p>
                             </div>
                         </div>
 
-                        <!-- BILLING TOGGLE (Parcelado) -->
-                        <div class="bg-brand-surface-light rounded-xl p-4 border border-brand-border">
-                            <label class="flex items-center justify-between cursor-pointer">
-                                <span class="text-sm font-bold text-brand-text-secondary">Compra Parcelada?</span>
-                                <div class="relative inline-flex items-center cursor-pointer">
+                        <!-- BILLING TOGGLE -->
+                        <div class="bg-brand-bg rounded-2xl p-4 border border-brand-border/50">
+                            <label class="flex items-center justify-between cursor-pointer" onclick="event.preventDefault(); document.getElementById('isInstallmentInput').click()">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-xl bg-brand-surface flex items-center justify-center">
+                                        <span class="text-base">📅</span>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-brand-text-primary">Compra Parcelada?</p>
+                                        <p class="text-[10px] text-brand-text-secondary">Divide o valor em parcelas mensais</p>
+                                    </div>
+                                </div>
+                                <div class="relative inline-flex items-center cursor-pointer" onclick="event.stopPropagation()">
                                     <input type="checkbox" name="isInstallment" id="isInstallmentInput" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-brand-surface-light rounded-full peer peer-focus:ring-2 peer-focus:ring-brand-green/50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
+                                    <div class="w-12 h-6 bg-brand-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-green"></div>
                                 </div>
                             </label>
 
-                            <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-brand-border animate-fade-in">
+                            <div id="installmentOptions" class="hidden mt-4 pt-4 border-t border-brand-border/50 animate-fade-in">
                                 <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Parcelas</label>
-                                        <input type="number" name="installmentsCount" min="2" max="60" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Ex: 10">
+                                    <div class="relative">
+                                        <label class="absolute -top-2 left-3 bg-brand-bg px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Parcelas</label>
+                                        <input type="number" name="installmentsCount" min="2" max="60" 
+                                            class="w-full bg-brand-surface rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold text-center" 
+                                            placeholder="Ex: 10">
                                     </div>
-                                    <div>
-                                         <label class="block text-[10px] font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Vencimento</label>
-                                         <input type="number" name="installmentDay" min="1" max="31" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-white focus:border-brand-green outline-none placeholder-gray-400" placeholder="Dia (Opcional)">
+                                    <div class="relative">
+                                        <label class="absolute -top-2 left-3 bg-brand-bg px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Vencimento</label>
+                                        <input type="number" name="installmentDay" min="1" max="31" 
+                                            class="w-full bg-brand-surface rounded-xl border border-brand-border p-4 text-brand-text-primary text-sm focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all font-bold text-center" 
+                                            placeholder="Dia">
                                     </div>
                                 </div>
-                                <p class="text-xs text-brand-text-secondary mt-2">O valor total será dividido pelo número de parcelas.</p>
+                                <p class="text-[10px] text-brand-text-secondary mt-2">O valor total será dividido pelo número de parcelas.</p>
                             </div>
                         </div>
                         
@@ -327,9 +387,10 @@ export const WalletModule = {
                     </form>
 
                     <!-- Footer (Fixed) -->
-                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
-                        <button type="submit" form="transactionForm" class="w-full bg-brand-green text-brand-text-primary font-bold py-4 rounded-xl shadow-lg shadow-brand-green/20 hover:scale-[1.02] transition shrink-0">
-                            Salvar
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="transactionForm" 
+                            class="w-full bg-brand-green hover:bg-emerald-400 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-green/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
+                            Salvar Transação
                         </button>
                     </div>
                 </div>
@@ -337,17 +398,23 @@ export const WalletModule = {
 
             <!-- MODAL DELETE CONFIRMATION -->
     <div id="deleteConfirmationModal" class="fixed inset-0 z-[60] hidden">
-        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm p-4">
-            <div class="bg-brand-surface border border-brand-border rounded-2xl p-6 shadow-2xl text-center animate-shake">
-                <div class="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </div>
-                <h3 class="text-xl font-bold text-brand-text-primary mb-2">Excluir Transação?</h3>
-                <p class="text-brand-text-secondary text-sm mb-6">Essa ação não pode ser desfeita. Tem certeza que deseja apagar esse registro?</p>
-                <div class="flex gap-3">
-                    <button id="cancelDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-brand-text-secondary bg-brand-surface-light hover:bg-brand-surface-light transition" onclick="window.app.WalletModule.closeDeleteModal()">Cancelar</button>
-                    <button id="confirmDeleteBtn" class="flex-1 py-3 rounded-xl font-bold text-brand-text-primary bg-red-600 hover:bg-red-700 shadow-lg shadow-red-600/20 transition">Excluir</button>
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-md"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm px-5">
+            <div class="bg-brand-surface border border-red-500/20 rounded-3xl p-7 shadow-2xl relative overflow-hidden">
+                <!-- Decorative red glow -->
+                <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/50 to-transparent"></div>
+                <div class="absolute -top-10 -right-10 w-48 h-48 bg-red-500/8 rounded-full blur-3xl pointer-events-none"></div>
+                <!-- Content -->
+                <div class="relative z-10">
+                    <div class="w-14 h-14 bg-red-500/15 border border-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </div>
+                    <h3 class="text-xl font-black text-brand-text-primary text-center mb-2 tracking-tight">Excluir Transação?</h3>
+                    <p class="text-brand-text-secondary text-sm text-center mb-7 leading-relaxed">Essa ação é permanente e não pode ser desfeita.</p>
+                    <div class="flex gap-3">
+                        <button id="cancelDeleteBtn" class="flex-1 py-3.5 rounded-2xl font-bold text-brand-text-secondary bg-brand-bg border border-brand-border/50 hover:bg-brand-surface-light transition-all active:scale-95" onclick="window.app.WalletModule.closeDeleteModal()">Cancelar</button>
+                        <button id="confirmDeleteBtn" class="flex-1 py-3.5 rounded-2xl font-black text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/25 transition-all active:scale-95">Excluir</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -395,6 +462,10 @@ export const WalletModule = {
             categorySelect: document.getElementById('transactionCategory'),
             filterTabs: document.querySelectorAll('.filter-tab'),
             totalBalance: document.getElementById('walletTotalBalance'),
+            projectedBalance: document.getElementById('walletProjectedBalance'),
+            totalIncome: document.getElementById('walletTotalIncome'),
+            totalExpenses: document.getElementById('walletTotalExpenses'),
+            summaryCharts: document.getElementById('walletSummaryCharts'),
             prevMonthBtn: document.getElementById('prevMonthBtn'),
             nextMonthBtn: document.getElementById('nextMonthBtn'),
             deleteModal: document.getElementById('deleteConfirmationModal'),
@@ -497,6 +568,19 @@ export const WalletModule = {
         // Month Navigation
         if (this.dom.prevMonthBtn) this.dom.prevMonthBtn.addEventListener('click', () => this.changeMonth(-1));
         if (this.dom.nextMonthBtn) this.dom.nextMonthBtn.addEventListener('click', () => this.changeMonth(1));
+
+        // Import Statement
+        const importBtn = document.getElementById('importStatementBtn');
+        const fileInput = document.getElementById('statementFileInput');
+        if (importBtn && fileInput) {
+            importBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    this.handleImportStatement(e.target.files[0]);
+                    e.target.value = ''; // Reset for same file selection
+                }
+            });
+        }
     },
 
     changeMonth(delta) {
@@ -616,6 +700,17 @@ export const WalletModule = {
             return tx.type === 'income' ? acc + amount : acc - amount;
         }, 0);
         this.dom.totalBalance.textContent = this.formatCurrency(total / 100);
+
+        // Calculate and displayed Projected Balance
+        if (this.dom.projectedBalance) {
+            // Get the last second of the current viewed month
+            const year = this.state.currentDate.getFullYear();
+            const month = this.state.currentDate.getMonth();
+            const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59);
+
+            const projectedCents = TransactionService.getProjectedBalance(endOfMonth);
+            this.dom.projectedBalance.textContent = this.formatCurrency(projectedCents / 100);
+        }
     },
 
     renderSkeleton() {
@@ -801,7 +896,10 @@ export const WalletModule = {
         const categoryIcon = t.categories?.icon || 'fa-tag';
         const iconElement = this.createIconElement(categoryIcon);
 
-        return createElement('div', { className: 'flex items-center p-4 border-b border-brand-border last:border-0 hover:bg-brand-surface-light transition group' }, [
+        return createElement('div', {
+            className: 'flex items-center p-4 border-b border-brand-border last:border-0 hover:bg-brand-surface-light active:bg-brand-surface-light transition-colors group cursor-pointer',
+            onclick: () => window.app.WalletModule.openEdit(t.id)
+        }, [
             // Icon
             createElement('div', {
                 className: 'w-10 h-10 rounded-full flex items-center justify-center mr-4 shrink-0',
@@ -1204,20 +1302,24 @@ export const WalletModule = {
                 ];
             }
 
-            // Filter to only show these specific categories
+            // Filter to prioritize these specific categories but NOT exclude others
             // We match by Name (Case Insensitive)
-            let filtered = categoriesToRender.filter(cat =>
+            const required = categoriesToRender.filter(cat =>
                 REQUIRED_CATEGORIES.some(req => req.toLowerCase() === cat.name.toLowerCase())
             );
 
-            // Important: sort them in the specific order requested
-            filtered.sort((a, b) => {
+            const others = categoriesToRender.filter(cat =>
+                !REQUIRED_CATEGORIES.some(req => req.toLowerCase() === cat.name.toLowerCase())
+            );
+
+            // Sort required in the specific order requested
+            required.sort((a, b) => {
                 const indexA = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === a.name.toLowerCase());
                 const indexB = REQUIRED_CATEGORIES.findIndex(r => r.toLowerCase() === b.name.toLowerCase());
                 return indexA - indexB;
             });
 
-            categoriesToRender = filtered;
+            categoriesToRender = [...required, ...others];
         }
 
         // Render Options
@@ -1540,7 +1642,435 @@ export const WalletModule = {
         return container;
     },
 
-    openTransactionModal(mode = 'create', transaction = null, isRecurringDefault = false) {
+    async handleImportStatement(file) {
+        Toast.show('Processando arquivo com OCR...', 'info');
+        try {
+            // We use 'por' for Portuguese language
+            const { data: { text } } = await Tesseract.recognize(file, 'por', {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
+                    }
+                }
+            });
+
+            console.log('OCR Text Result:', text);
+
+            const extractedTransactions = this.parseStatementText(text);
+
+            if (extractedTransactions && extractedTransactions.length > 0) {
+                if (extractedTransactions.length === 1) {
+                    // Single transaction (like a Pix receipt) -> Open Modal for review
+                    this.openTransactionModal('create', null, false, extractedTransactions[0]);
+                    Toast.show('1 transação encontrada. Verifique os dados.', 'success');
+                    HapticService.success();
+                } else {
+                    // Fetch accounts to let user choose where to import
+                    const accounts = AccountsService.accounts.filter(a => a.is_active) || [];
+                    // Multiple transactions -> Show Bulk Review Modal
+                    this.openBulkOCRReviewModal(extractedTransactions, accounts);
+                }
+            } else {
+                Toast.show('Não foi possível identificar transações claras. Tente uma imagem mais nítida.', 'warning');
+                HapticService.warning();
+            }
+        } catch (error) {
+            console.error('OCR Error:', error);
+            Toast.show('Erro ao processar imagem. Verifique sua conexão.', 'error');
+            HapticService.error();
+        }
+    },
+
+    openBulkOCRReviewModal(transactions, accounts = []) {
+        HapticService.light();
+
+        const overlay = createElement('div', {
+            className: 'fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4 sm:p-6',
+            id: 'ocr-bulk-modal'
+        });
+
+        // Account Selector Element
+        const accountSelect = createElement('select', {
+            className: 'w-full md:w-auto bg-brand-surface border border-brand-border rounded-lg px-2 py-1.5 text-sm text-brand-text-primary focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-colors shadow-sm font-semibold max-w-[150px]',
+            id: 'bulk-account-select'
+        }, [
+            createElement('option', { value: '' }, 'Selecionar Conta')
+        ]);
+
+        accounts.forEach(acc => {
+            const isMain = acc.is_main || false;
+            accountSelect.appendChild(createElement('option', {
+                value: acc.id,
+                selected: isMain // auto select main account if exists
+            }, acc.name));
+        });
+
+        const modal = createElement('div', {
+            className: 'bg-brand-surface border border-brand-border/50 w-full max-w-lg rounded-t-[1.5rem] sm:rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-slide-up sm:animate-scale-in'
+        }, [
+            createElement('div', { className: 'p-4 border-b border-brand-border flex justify-between items-center z-10 bg-brand-surface sm:rounded-t-2xl shadow-sm gap-2' }, [
+                createElement('h3', { className: 'text-base font-bold text-brand-text-primary truncate flex-1', id: 'bulk-modal-title' }, `Revisar ${transactions.length} Transações`),
+                accountSelect,
+                createElement('button', {
+                    className: 'p-2 rounded-full hover:bg-brand-surface-light text-brand-text-secondary transition-colors shrink-0',
+                    onclick: () => document.getElementById('ocr-bulk-modal').remove()
+                }, '✕')
+            ])
+        ]);
+
+        const listContainer = createElement('div', { className: 'flex-1 overflow-y-auto p-4 space-y-4 pt-6' });
+
+        transactions.forEach((tx, index) => {
+            const amountCents = Math.round(tx.amount * 100);
+
+            const card = createElement('div', { className: 'bg-brand-surface-light p-3 rounded-xl shadow-sm border border-brand-border flex flex-col gap-3 relative' });
+
+            // Delete Button
+            const btnRemove = createElement('button', {
+                className: 'absolute -top-3 -right-2 bg-brand-surface border border-brand-border text-brand-text-secondary rounded-full p-2 shadow-sm hover:!bg-accent-danger hover:!text-white hover:!border-accent-danger transition-colors z-10',
+                onclick: () => {
+                    tx._deleted = true;
+                    card.style.display = 'none';
+                    const remaining = transactions.filter(t => !t._deleted).length;
+                    document.getElementById('bulk-modal-title').innerText = `Revisar ${remaining} Transações`;
+                }
+            });
+            btnRemove.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>`;
+
+            const topRow = createElement('div', { className: 'flex gap-2 items-center' });
+
+            // Editable Description
+            const inputDesc = createElement('input', {
+                type: 'text',
+                value: tx.description,
+                className: 'flex-1 bg-brand-surface border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-text-primary focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-colors shadow-sm',
+                onchange: (e) => tx.description = e.target.value
+            });
+
+            // Editable Amount
+            const inputAmount = createElement('input', {
+                type: 'text',
+                value: typeof CurrencyMask !== 'undefined' ? CurrencyMask.format(amountCents.toString()) : `R$ ${tx.amount.toFixed(2)}`,
+                className: `w-28 text-right bg-brand-surface border border-brand-border rounded-lg px-3 py-2 text-sm font-bold focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-colors shadow-sm ${tx.type === 'expense' ? 'text-accent-danger' : 'text-accent-success'}`,
+                oninput: (e) => {
+                    if (typeof CurrencyMask !== 'undefined') {
+                        CurrencyMask.apply(e);
+                    }
+                },
+                onblur: (e) => {
+                    if (typeof CurrencyMask !== 'undefined') {
+                        const unmasked = CurrencyMask.unmask(e.target.value);
+                        tx.amount = unmasked / 100;
+                    } else {
+                        const val = parseFloat(e.target.value.replace(/[^0-9,-]+/g, '').replace(',', '.'));
+                        if (!isNaN(val)) tx.amount = Math.abs(val);
+                    }
+                }
+            });
+
+            topRow.appendChild(inputDesc);
+            topRow.appendChild(inputAmount);
+
+            const bottomRow = createElement('div', { className: 'flex justify-between items-center text-sm gap-2' });
+
+            // Editable Date
+            const inputDate = createElement('input', {
+                type: 'date',
+                value: tx.date,
+                className: 'flex-1 bg-brand-surface border border-brand-border rounded-lg px-2 py-1.5 text-brand-text-secondary focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-colors',
+                onchange: (e) => tx.date = e.target.value
+            });
+
+            // Editable Type
+            const selectType = createElement('select', {
+                className: 'w-24 bg-brand-surface border border-brand-border rounded-lg px-2 py-1.5 text-brand-text-secondary focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-colors text-xs',
+                onchange: (e) => {
+                    tx.type = e.target.value;
+                    inputAmount.classList.remove('text-accent-danger', 'text-accent-success');
+                    inputAmount.classList.add(tx.type === 'expense' ? 'text-accent-danger' : 'text-accent-success');
+                }
+            }, [
+                createElement('option', { value: 'expense', selected: tx.type === 'expense' }, 'Despesa'),
+                createElement('option', { value: 'income', selected: tx.type === 'income' }, 'Receita')
+            ]);
+
+            bottomRow.appendChild(inputDate);
+            bottomRow.appendChild(selectType);
+
+            card.appendChild(btnRemove);
+            card.appendChild(topRow);
+            card.appendChild(bottomRow);
+
+            listContainer.appendChild(card);
+        });
+
+        modal.appendChild(listContainer);
+
+        const footer = createElement('div', { className: 'p-4 border-t border-brand-border bg-brand-surface sm:rounded-b-2xl flex gap-3 pb-safe z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]' }, [
+            createElement('button', {
+                className: 'flex-1 py-3 px-4 rounded-xl border border-brand-border text-brand-text-secondary font-semibold hover:bg-brand-surface-light transition',
+                onclick: () => document.getElementById('ocr-bulk-modal').remove()
+            }, 'Cancelar'),
+            createElement('button', {
+                className: 'flex-1 py-3 px-4 rounded-xl bg-brand font-bold text-white shadow-lg hover:bg-brand-600 transition',
+                onclick: async (e) => {
+                    const validTx = transactions.filter(t => !t._deleted);
+                    if (validTx.length === 0) {
+                        Toast.show('Nenhuma transação selecionada.', 'warning');
+                        return;
+                    }
+
+                    const accountSelect = document.getElementById('bulk-account-select');
+                    const selectedAccountId = accountSelect ? accountSelect.value : null;
+
+                    const btn = e.target;
+                    btn.disabled = true;
+                    btn.innerHTML = 'Importando...';
+
+                    let successCount = 0;
+                    for (const tx of validTx) {
+                        try {
+                            const txPayload = {
+                                amount: Math.round(tx.amount * 100),
+                                description: tx.description,
+                                date: tx.date,
+                                type: tx.type,
+                                payment_method: 'money',
+                                category_id: null
+                            };
+
+                            if (selectedAccountId) {
+                                txPayload.account_id = selectedAccountId;
+                            }
+
+                            await window.app.TransactionService.createTransaction(txPayload);
+                            successCount++;
+                        } catch (err) {
+                            console.error('OCR Batch Insert Error:', err);
+                        }
+                    }
+
+                    document.getElementById('ocr-bulk-modal').remove();
+                    await this.loadData();
+                    Toast.show(`${successCount} de ${validTx.length} importadas com sucesso!`, 'success');
+                    HapticService.success();
+                }
+            }, 'Sincronizar')
+        ]);
+
+        modal.appendChild(footer);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    },
+
+    parseStatementText(text) {
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+        // Date: DD/MM/YYYY or DD/MM/YY or DD/MM or "1de Agosto de 2025" or "15 de Agosto"
+        const dateRegexMatchList = [
+            /(\d{2})\/(\d{2})(?:\/(\d{4}|\d{2}))?/,
+            /(\d{1,2})\s+de\s+([a-zA-Z]+)(?:\s+de\s+(\d{4}))?/i
+        ];
+        // Amount: R$ 1.234,56 or -150,00 or 1.500,00 or AS 1.300,00
+        const amountRegex = /(?:R\$|AS|As|A\$|RS|)[\s]*(-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/;
+
+        let transactions = [];
+        let currentYear = new Date().getFullYear();
+
+        // 1. Group lines into logical "Chunks" (e.g. 3-4 lines that belong together)
+        // A new chunk often starts when we see a strong keyword or a new date.
+        // But for simplicity, let's just slide a window over the lines.
+
+        let pendingDesc = "";
+        let pendingAmount = null;
+        let pendingDate = null;
+        let pendingIsExpense = true;
+
+        const pushTransaction = () => {
+            if (pendingAmount !== null) {
+                transactions.push({
+                    amount: pendingAmount,
+                    description: pendingDesc || "Transação OCR",
+                    date: pendingDate || new Date().toISOString().split('T')[0],
+                    type: pendingIsExpense ? 'expense' : 'income'
+                });
+                // reset for next
+                pendingDesc = "";
+                pendingAmount = null;
+                pendingDate = null;
+            }
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const lowerLine = line.toLowerCase();
+
+            // Look for Date
+            let foundDate = null;
+            for (const dRegex of dateRegexMatchList) {
+                const dateMatch = line.match(dRegex);
+                if (dateMatch) {
+                    if (dateMatch[0].includes('de')) {
+                        // Semantic date: "15 de Agosto de 2025"
+                        let d = dateMatch[1].padStart(2, '0');
+                        let mName = dateMatch[2].toLowerCase();
+                        let y = dateMatch[3] || currentYear.toString();
+
+                        const months = { 'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04', 'maio': '05', 'junho': '06', 'julho': '07', 'agosto': '08', 'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12' };
+                        let m = months[mName] || '01';
+                        foundDate = `${y}-${m}-${d}`;
+                    } else {
+                        // Numeric date
+                        let d = dateMatch[1];
+                        let m = dateMatch[2];
+                        let y = dateMatch[3] || currentYear.toString();
+                        if (y.length === 2) y = '20' + y;
+                        foundDate = `${y}-${m}-${d}`;
+                    }
+                    break;
+                }
+            }
+
+            if (foundDate) {
+                pendingDate = foundDate;
+            }
+
+            // Look for Amount
+            // Avoid interpreting strings of digits like "1246205" as an amount unless it has a comma/dot for decimals or has R$ prefix
+            // To be safer, we look for explicit currency markers or valid decimals
+            const strictAmountRegex = /(?:R\$|AS|As|A\$|RS)\s*(-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/;
+            let amountMatch = line.match(strictAmountRegex);
+
+            // Fallback to looser if no strict match, but it MUST have a comma for cents to avoid IDs
+            if (!amountMatch) {
+                const looseAmountRegex = /(-?\d{1,3}(?:\.\d{3})*(?:,\d{2}))/;
+                amountMatch = line.match(looseAmountRegex);
+            }
+
+            if (amountMatch && !lowerLine.includes('saldo')) {
+                const rawAmountStr = amountMatch[1];
+                const amountStr = rawAmountStr.replace(/\./g, '').replace(',', '.');
+                const parsed = parseFloat(amountStr);
+
+                if (!isNaN(parsed) && parsed !== 0) {
+                    pendingAmount = Math.abs(parsed);
+
+                    if (rawAmountStr.includes('-') || lowerLine.includes(' d ') || lowerLine.endsWith(' d') || lowerLine.includes('enviado') || lowerLine.includes('pagamento efetuado')) {
+                        pendingIsExpense = true;
+                    } else if (lowerLine.includes(' c ') || lowerLine.endsWith(' c') || lowerLine.includes('recebido') || lowerLine.includes('recebida') || parsed > 0 && !rawAmountStr.includes('-')) {
+                        pendingIsExpense = false;
+                    } else {
+                        pendingIsExpense = true; // default
+                    }
+                }
+            }
+
+            // Look for Description
+            // If the line starts with a keyword, use it as description backbone
+            if (lowerLine.startsWith('pix enviado:') || lowerLine.startsWith('pix recebido:') || lowerLine.startsWith('pagamento efetuado:') || lowerLine.startsWith('ph recebida:') || lowerLine.startsWith('ph recebido:')) {
+                // If we already had an amount pending, we should probably commit the PREVIOUS transaction
+                if (pendingAmount !== null) {
+                    pushTransaction();
+                }
+
+                // Extract description
+                let cleanLine = line.replace(/Pix enviado:|Pix recebido:|Pagamento efetuado:|Ph recebida:|Ph recebido:/i, '').trim();
+                // Remove the quote marks around CNPJ/names often found in OCR
+                cleanLine = cleanLine.replace(/["“”]/g, '').trim();
+                // Try to strip trailing amounts from description
+                if (amountMatch) {
+                    cleanLine = cleanLine.replace(amountMatch[0], '').trim();
+                }
+                pendingDesc = cleanLine;
+            }
+
+            // Try to commit transaction if we have both an amount and description (or if we hit a new date)
+            // But sometimes the date comes on the NEXT line
+            if (pendingAmount !== null && pendingDesc !== "") {
+                // look ahead one line for date if we don't have it yet
+                if (!pendingDate && i + 1 < lines.length) {
+                    let nextLineMatch = lines[i + 1].match(dateRegexMatchList[0]) || lines[i + 1].match(dateRegexMatchList[1]);
+                    if (nextLineMatch) {
+                        // We let the loop naturally pick it up on next iteration to keep logic clean, 
+                        // or we can wait to push until we're sure we have a date or hit a new transaction start.
+                    }
+                }
+            }
+        }
+
+        // Push the last one if lingering
+        pushTransaction();
+
+        // Fallback: If no transactions were found via the structured list logic, maybe it's a standalone receipt where data is scattered
+        if (transactions.length === 0) {
+            let bestDateStr = null;
+            let bestAmount = null;
+            let isExpense = true;
+            let bestDescription = "Transação OCR";
+
+            for (const line of lines) {
+                const lowerLine = line.toLowerCase();
+
+                if (bestAmount === null) {
+                    let amountMatch = line.match(/(?:R\$|AS|As|RS)\s*(-?\d{1,3}(?:\.\d{3})*(?:,\d{2})?)/);
+                    if (!amountMatch) amountMatch = line.match(/(-?\d{1,3}(?:\.\d{3})*(?:,\d{2}))/);
+                    if (amountMatch && !lowerLine.includes('saldo')) {
+                        const rawAmountStr = amountMatch[1];
+                        const amountStr = rawAmountStr.replace(/\./g, '').replace(',', '.');
+                        const parsed = parseFloat(amountStr);
+                        if (!isNaN(parsed) && parsed !== 0) {
+                            bestAmount = Math.abs(parsed);
+                            if (parsed < 0 || lowerLine.includes('pagou') || lowerLine.includes('enviado')) {
+                                isExpense = true;
+                            } else if (lowerLine.includes('recebeu')) {
+                                isExpense = false;
+                            }
+                        }
+                    }
+                }
+
+                if (bestDateStr === null) {
+                    for (const dRegex of dateRegexMatchList) {
+                        const dateMatch = line.match(dRegex);
+                        if (dateMatch) {
+                            if (dateMatch[0].includes('de')) {
+                                let d = dateMatch[1].padStart(2, '0');
+                                let mName = dateMatch[2].toLowerCase();
+                                let y = dateMatch[3] || currentYear.toString();
+                                const months = { 'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04', 'maio': '05', 'junho': '06', 'julho': '07', 'agosto': '08', 'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12' };
+                                let m = months[mName] || '01';
+                                bestDateStr = `${y}-${m}-${d}`;
+                            } else {
+                                let d = dateMatch[1];
+                                let m = dateMatch[2];
+                                let y = dateMatch[3] || currentYear.toString();
+                                if (y.length === 2) y = '20' + y;
+                                bestDateStr = `${y}-${m}-${d}`;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if (lowerLine.includes('nome ') && lowerLine.indexOf('nome ') === 0) {
+                    bestDescription = line.substring(5).trim();
+                }
+            }
+
+            if (bestAmount !== null) {
+                transactions.push({
+                    amount: bestAmount,
+                    description: bestDescription,
+                    date: bestDateStr || new Date().toISOString().split('T')[0],
+                    type: isExpense ? 'expense' : 'income'
+                });
+            }
+        }
+
+        return transactions;
+    },
+
+    openTransactionModal(mode = 'create', transaction = null, isRecurringDefault = false, prefillData = null) {
         HapticService.light();
 
         if (!this.dom.modal || !this.dom.form) return;
@@ -1592,6 +2122,26 @@ export const WalletModule = {
 
             const titleEl = this.dom.modal.querySelector('.modal-title');
             if (titleEl) titleEl.textContent = 'Nova Transação';
+
+            // Handle Prefill Data (from OCR)
+            if (prefillData) {
+                const descInput = this.dom.form.querySelector('[name="description"]');
+                if (prefillData.description && descInput) descInput.value = prefillData.description;
+
+                if (prefillData.amount && amountInput) {
+                    // amountInput expects formatted string
+                    const amountInCents = Math.round(Math.abs(prefillData.amount) * 100);
+                    amountInput.value = typeof CurrencyMask !== 'undefined' ? CurrencyMask.format(amountInCents.toString()) : prefillData.amount;
+                }
+
+                const dateInput = this.dom.form.querySelector('[name="date"]');
+                if (prefillData.date && dateInput) dateInput.value = prefillData.date;
+
+                if (prefillData.type) {
+                    const typeRadio = this.dom.form.querySelector(`input[name="type"][value="${prefillData.type}"]`);
+                    if (typeRadio) typeRadio.checked = true;
+                }
+            }
 
             // Handle Recurring Default
             if (isRecurringDefault && recurringInput) {
@@ -1763,40 +2313,58 @@ window.app.openCreditCardModal = () => {
 
     const modal = document.createElement('div');
     modal.id = 'credit-card-modal';
-    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.className = 'fixed inset-0 z-50 flex items-end md:items-center justify-center';
     modal.innerHTML = `
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
-        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up max-h-[80vh] overflow-y-auto">
-            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
-            <h3 class="text-xl font-bold text-brand-text-primary mb-6">💳 Novo Cartão de Crédito</h3>
-            
-            <form id="credit-card-form" class="space-y-4">
+        <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full md:max-w-md bg-brand-surface border-t md:border border-brand-border/60 rounded-t-[2rem] md:rounded-3xl shadow-2xl overflow-hidden animate-slide-up md:animate-scale-in max-h-[90vh] overflow-y-auto">
+            <!-- Accent top line -->
+            <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+            <div class="absolute -top-8 -right-8 w-40 h-40 bg-purple-500/8 rounded-full blur-3xl pointer-events-none"></div>
+
+            <!-- Drag Handle -->
+            <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 md:hidden"></div>
+
+            <!-- Header -->
+            <div class="px-6 pt-5 pb-4 border-b border-brand-border/50 flex items-center justify-between">
                 <div>
-                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Nome do Cartão</label>
-                    <input type="text" name="name" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Nubank, Inter, C6">
+                    <h3 class="text-lg font-black text-brand-text-primary tracking-tight">💳 Novo Cartão</h3>
+                    <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest mt-0.5 opacity-70">Adicione seu cartão de crédito</p>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Banco / Instituição</label>
-                    <input type="text" name="bank" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Nubank">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Últimos 4 Dígitos</label>
-                        <input type="text" name="last_digits" maxlength="4" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="1234">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Dia Vencimento</label>
-                        <input type="number" name="billing_day" min="1" max="31" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="10">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Limite (Opcional)</label>
-                    <input type="text" name="credit_limit" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="R$ 0,00">
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-4 rounded-xl mt-4">
-                    Salvar Cartão
+                <button onclick="this.closest('#credit-card-modal').remove()" class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
-            </form>
+            </div>
+            
+            <!-- Body -->
+            <div class="p-6">
+                <form id="credit-card-form" class="space-y-5">
+                    <div class="relative">
+                        <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Nome do Cartão</label>
+                        <input type="text" name="name" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Nubank, Inter, C6">
+                    </div>
+                    <div class="relative">
+                        <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Banco / Instituição</label>
+                        <input type="text" name="bank" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Nubank">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Últimos 4 Dígitos</label>
+                            <input type="text" name="last_digits" maxlength="4" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all text-center placeholder:text-brand-text-secondary/30" placeholder="1234">
+                        </div>
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Vencimento</label>
+                            <input type="number" name="billing_day" min="1" max="31" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all text-center placeholder:text-brand-text-secondary/30" placeholder="Dia">
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Limite (Opcional)</label>
+                        <input type="text" name="credit_limit" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
+                    </div>
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-black py-4 rounded-2xl mt-2 shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
+                        Salvar Cartão
+                    </button>
+                </form>
+            </div>
         </div>
     `;
     document.body.appendChild(modal);
@@ -1827,37 +2395,55 @@ window.app.openAddPurchaseModal = (cardId) => {
 
     const modal = document.createElement('div');
     modal.id = 'add-purchase-modal';
-    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.className = 'fixed inset-0 z-50 flex items-end md:items-center justify-center';
     modal.innerHTML = `
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
-        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up">
-            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
-            <h3 class="text-xl font-bold text-brand-text-primary mb-6">🛒 Nova Compra no Cartão</h3>
+        <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full md:max-w-md bg-brand-surface border-t md:border border-brand-border/60 rounded-t-[2rem] md:rounded-3xl shadow-2xl overflow-hidden animate-slide-up md:animate-scale-in">
+            <!-- Accent top line -->
+            <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+            <div class="absolute -top-8 right-0 w-40 h-40 bg-purple-500/8 rounded-full blur-3xl pointer-events-none"></div>
             
-            <form id="add-purchase-form" class="space-y-4">
-                <input type="hidden" name="card_id" value="${cardId}">
-                <div>
-                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Valor</label>
-                    <input type="text" name="amount" data-currency="true" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-4 text-2xl font-bold text-white" placeholder="R$ 0,00">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Descrição</label>
-                    <input type="text" name="description" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" placeholder="Ex: Amazon, iFood, Uber">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Data</label>
-                        <input type="date" name="purchase_date" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white [color-scheme:dark]" value="${new Date().toISOString().split('T')[0]}">
+            <!-- Drag Handle -->
+            <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 md:hidden"></div>
+
+            <!-- Header -->
+            <div class="px-6 pt-5 pb-4 border-b border-brand-border/50">
+                <h3 class="text-lg font-black text-brand-text-primary tracking-tight">🛒 Nova Compra no Cartão</h3>
+                <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest mt-0.5 opacity-70">Registre uma compra na fatura</p>
+            </div>
+            
+            <!-- Body -->
+            <div class="p-6">
+                <form id="add-purchase-form" class="space-y-5">
+                    <input type="hidden" name="card_id" value="${cardId}">
+
+                    <!-- Amount - large display -->
+                    <div class="bg-brand-bg rounded-2xl p-5 border border-brand-border/50">
+                        <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-2">Valor da Compra</label>
+                        <input type="text" name="amount" data-currency="true" required class="w-full bg-transparent text-4xl font-black text-brand-text-primary border-0 p-0 focus:ring-0 outline-none placeholder:text-brand-text-secondary/25" placeholder="R$ 0,00">
                     </div>
-                    <div>
-                        <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Parcelas</label>
-                        <input type="number" name="installments" min="1" max="24" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white" value="1">
+
+                    <div class="relative">
+                        <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Descrição</label>
+                        <input type="text" name="description" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Amazon, iFood, Uber">
                     </div>
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 text-white font-bold py-4 rounded-xl mt-4">
-                    Adicionar Compra
-                </button>
-            </form>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Data</label>
+                            <input type="date" name="purchase_date" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all [color-scheme:dark]" value="${new Date().toISOString().split('T')[0]}">
+                        </div>
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Parcelas</label>
+                            <input type="number" name="installments" min="1" max="24" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm text-center focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all" value="1">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-purple-500/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
+                        Adicionar Compra
+                    </button>
+                </form>
+            </div>
         </div>
     `;
     document.body.appendChild(modal);
@@ -1913,37 +2499,62 @@ window.app.viewCardInvoice = async (cardId) => {
 
     const modal = document.createElement('div');
     modal.id = 'invoice-modal';
-    modal.className = 'fixed inset-0 z-50 flex items-end justify-center';
+    modal.className = 'fixed inset-0 z-50 flex items-end md:items-center justify-center';
+
+    const invoiceTotal = ((card?.current_invoice || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
     modal.innerHTML = `
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="this.parentElement.remove()"></div>
-        <div class="relative w-full bg-brand-surface border-t border-brand-border rounded-t-[2rem] p-6 pb-10 animate-slide-up max-h-[80vh] overflow-y-auto">
-            <div class="w-12 h-1 bg-brand-surface-light rounded-full mx-auto mb-6"></div>
-            <h3 class="text-xl font-bold text-brand-text-primary mb-2">📋 Fatura ${card?.name || 'Cartão'}</h3>
-            <p class="text-2xl font-black text-purple-400 mb-6 value-sensitive">
-                R$ ${((card?.current_invoice || 0) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-            
-            <div class="space-y-2">
+        <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="this.parentElement.remove()"></div>
+        <div class="relative w-full md:max-w-md bg-brand-surface border-t md:border border-brand-border/60 rounded-t-[2rem] md:rounded-3xl shadow-2xl overflow-hidden animate-slide-up md:animate-scale-in">
+            <!-- Accent -->
+            <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+            <div class="absolute -top-8 right-0 w-40 h-40 bg-purple-500/8 rounded-full blur-3xl pointer-events-none"></div>
+
+            <!-- Drag Handle -->
+            <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 md:hidden"></div>
+
+            <!-- Header -->
+            <div class="px-6 pt-5 pb-4 border-b border-brand-border/50 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-black text-brand-text-primary tracking-tight">📋 Fatura ${card?.name || 'Cartão'}</h3>
+                    <p class="text-2xl font-black text-purple-400 mt-1 value-sensitive">R$ ${invoiceTotal}</p>
+                </div>
+                <button onclick="this.closest('#invoice-modal').remove()" class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Purchase list -->
+            <div class="p-5 space-y-2 max-h-[55vh] overflow-y-auto custom-scrollbar">
                 ${purchases.length === 0 ? `
-                    <div class="text-center py-8 text-brand-text-secondary">
-                        <p class="text-sm">Nenhuma compra nesta fatura</p>
+                    <div class="text-center py-10">
+                        <div class="w-12 h-12 bg-brand-surface-light rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl">🛒</div>
+                        <p class="text-sm font-bold text-brand-text-secondary">Nenhuma compra nesta fatura</p>
                     </div>
                 ` : purchases.map(p => `
-                    <div class="bg-brand-surface-light p-3 rounded-xl flex justify-between items-center">
-                        <div>
-                            <p class="text-sm font-bold text-brand-text-primary">${p.description}</p>
-                            <p class="text-[10px] text-brand-text-secondary">${new Date(p.purchase_date).toLocaleDateString('pt-BR')}</p>
+                    <div class="bg-brand-bg rounded-2xl p-4 flex justify-between items-center border border-brand-border/30 hover:border-brand-border transition-all">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-bold text-brand-text-primary truncate">
+                                ${p.description}
+                            </p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <p class="text-[10px] text-brand-text-secondary">${new Date(p.purchase_date).toLocaleDateString('pt-BR')}</p>
+                                ${p.installments > 1 ? `<span class="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full font-bold">${p.current_installment}/${p.installments}x</span>` : ''}
+                            </div>
                         </div>
-                        <span class="text-sm font-bold text-brand-text-primary value-sensitive">
-                            R$ ${(p.amount / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        <span class="text-sm font-black text-brand-text-primary value-sensitive ml-3 shrink-0">
+                            R$ ${(parseFloat(p.amount) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
                     </div>
                 `).join('')}
             </div>
-            
-            <button onclick="this.closest('#invoice-modal').remove()" class="w-full bg-brand-surface-light text-brand-text-secondary font-bold py-3 rounded-xl mt-6">
-                Fechar
-            </button>
+
+            <!-- Footer -->
+            <div class="p-5 border-t border-brand-border/50">
+                <button onclick="this.closest('#invoice-modal').remove()" class="w-full bg-brand-bg border border-brand-border/50 hover:bg-brand-surface-light text-brand-text-secondary font-bold py-3.5 rounded-2xl transition-all active:scale-95 text-sm">
+                    Fechar
+                </button>
+            </div>
         </div>
     `;
     document.body.appendChild(modal);

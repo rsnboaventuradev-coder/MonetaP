@@ -354,21 +354,25 @@ export const GoalsModule = {
         return `
             <!-- Add Goal Modal -->
             <div id="add-goal-modal" class="fixed inset-0 z-[100] hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300" id="close-goal-overlay"></div>
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md" id="close-goal-overlay"></div>
                 
                 <!-- Modal Container -->
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-background-card_light dark:bg-background-card_dark rounded-t-2xl md:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl border-t md:border border-slate-200 dark:border-slate-700 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[600px] md:max-w-2xl animate-slide-up md:animate-scale-in">
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl max-h-[90vh] flex flex-col shadow-2xl md:border md:border-brand-border/60 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[600px] md:max-w-2xl animate-slide-up md:animate-scale-in overflow-hidden">
                     
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile Only) -->
-                    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
                     
                     <!-- Header (Fixed) -->
-                    <div class="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shrink-0">
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
                         <div>
-                            <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark tracking-tight">Nova Meta</h3>
-                            <p class="text-xs text-text-secondary_light dark:text-text-secondary_dark">Defina seu próximo objetivo financeiro</p>
+                            <h3 class="text-lg font-black text-brand-text-primary tracking-tight">Nova Meta</h3>
+                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest opacity-70 mt-0.5">Defina seu próximo objetivo</p>
                         </div>
-                        <button class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-text-secondary_light dark:text-text-secondary_dark hover:text-text-primary_light dark:hover:text-text-primary_dark hover:bg-slate-200 dark:hover:bg-slate-700 transition" id="close-goal-btn">
+                        <button class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90" id="close-goal-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
@@ -376,120 +380,102 @@ export const GoalsModule = {
                     </div>
                     
                     <!-- Body (Scrollable) -->
-                    <div class="overflow-y-auto flex-1 p-6 custom-scrollbar">
+                    <div class="overflow-y-auto flex-1 p-6 custom-scrollbar relative z-10">
                         <form id="add-goal-form" class="space-y-5">
                             
-                            <!-- Goal Type Selection (Visual) -->
+                            <!-- Goal Type Selection -->
                             <div>
-                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-widest mb-3">Qual é o foco desta meta?</label>
-                                <div class="grid grid-cols-2 gap-3 mt-3">
+                                <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-3">Qual é o foco desta meta?</label>
+                                <div class="grid grid-cols-2 gap-3">
                                     <label class="cursor-pointer relative">
                                         <input type="radio" name="type" value="security" class="peer sr-only">
-                                        <div class="p-4 rounded-xl bg-background-light dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-brand-500/50 peer-checked:bg-accent-success/10 peer-checked:border-accent-success peer-checked:text-accent-success transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
-                                            <svg class="w-8 h-8 text-slate-400 peer-checked:text-accent-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-emerald-500/40 peer-checked:bg-emerald-500/15 peer-checked:border-emerald-500/60 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                            <svg class="w-7 h-7 text-brand-text-secondary peer-checked:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                                             </svg>
-                                            <span class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-success">Segurança</span>
+                                            <span class="text-xs font-bold text-brand-text-secondary">Segurança</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer relative">
                                         <input type="radio" name="type" value="career" class="peer sr-only">
-                                        <div class="p-4 rounded-xl bg-background-light dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-brand-500/50 peer-checked:border-blue-500 peer-checked:bg-blue-500/10 peer-checked:text-blue-500 transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
-                                            <svg class="w-8 h-8 text-slate-400 peer-checked:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-blue-500/40 peer-checked:border-blue-500/60 peer-checked:bg-blue-500/15 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                            <svg class="w-7 h-7 text-brand-text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                                             </svg>
-                                            <span class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-blue-500">Carreira</span>
+                                            <span class="text-xs font-bold text-brand-text-secondary">Carreira</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer relative">
                                         <input type="radio" name="type" value="lifestyle" class="peer sr-only" checked>
-                                        <div class="p-4 rounded-xl bg-background-light dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-brand-500/50 peer-checked:border-pink-500 peer-checked:bg-pink-500/10 peer-checked:text-pink-500 transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
-                                            <span class="text-2xl grayscale peer-checked:grayscale-0">🌴</span>
-                                            <span class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-pink-500">Estilo de Vida</span>
+                                        <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-pink-500/40 peer-checked:border-pink-500/60 peer-checked:bg-pink-500/15 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                            <span class="text-2xl">🌴</span>
+                                            <span class="text-xs font-bold text-brand-text-secondary">Estilo de Vida</span>
                                         </div>
                                     </label>
                                     <label class="cursor-pointer relative">
                                         <input type="radio" name="type" value="financial_freedom" class="peer sr-only">
-                                        <div class="p-4 rounded-xl bg-background-light dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-brand-500/50 peer-checked:border-accent-gold peer-checked:bg-accent-gold/10 peer-checked:text-accent-gold transition flex flex-col items-center gap-2 text-center h-full shadow-sm">
-                                            <span class="text-2xl grayscale peer-checked:grayscale-0">🚀</span>
-                                            <span class="text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark peer-checked:text-accent-gold">Indep. Financeira</span>
+                                        <div class="p-4 rounded-2xl bg-brand-bg border border-brand-border hover:border-brand-gold/40 peer-checked:border-brand-gold/60 peer-checked:bg-brand-gold/15 transition-all flex flex-col items-center gap-2 text-center h-full">
+                                            <span class="text-2xl">🚀</span>
+                                            <span class="text-xs font-bold text-brand-text-secondary">Indep. Financeira</span>
                                         </div>
                                     </label>
                                 </div>
                             </div>
 
                             <!-- Name Field -->
-                            <div>
-                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Nome da Meta</label>
-                                <input type="text" name="title" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 text-lg font-medium" placeholder="Ex: Viagem para Paris">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Nome da Meta</label>
+                                <input type="text" name="title" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-base focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Viagem para Paris">
                             </div>
 
                             <!-- Values Section -->
                             <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Valor Alvo</label>
-                                    <div class="relative">
-                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
-                                        <input type="text" name="target_amount" data-currency="true" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="R$ 0,00">
-                                    </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Valor Alvo</label>
+                                    <input type="text" name="target_amount" data-currency="true" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                                 </div>
-                                 <div class="group relative">
-                                    <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1 flex justify-between">
-                                        Já Guardado
-                                        <span class="text-[10px] text-text-primary_light dark:text-text-primary_dark bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded cursor-help" title="Saldo inicial se você já começou">?</span>
-                                    </label>
-                                    <div class="relative">
-                                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
-                                        <input type="text" name="current_amount" data-currency="true" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold" placeholder="R$ 0,00">
-                                    </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Já Guardado</label>
+                                    <input type="text" name="current_amount" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                                 </div>
                             </div>
 
                             <!-- Priority & Date -->
                             <div class="grid grid-cols-2 gap-4">
-                                 <div>
-                                    <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Prioridade</label>
-                                    <div class="relative">
-                                        <select name="priority" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition appearance-none cursor-pointer">
-                                            <option value="high">🔥 Alta</option>
-                                            <option value="medium" selected>⚡ Média</option>
-                                            <option value="low">🧊 Baixa</option>
-                                        </select>
-                                        <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-text-secondary_light dark:text-text-secondary_dark">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                        </div>
-                                    </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Prioridade</label>
+                                    <select name="priority" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
+                                        <option value="high">🔥 Alta</option>
+                                        <option value="medium" selected>⚡ Média</option>
+                                        <option value="low">🧊 Baixa</option>
+                                    </select>
                                 </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Prazo (Opcional)</label>
-                                    <input type="date" name="deadline" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition [color-scheme:light] dark:[color-scheme:dark]">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Prazo (Opcional)</label>
+                                    <input type="date" name="deadline" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all [color-scheme:dark]">
                                 </div>
                             </div>
 
-                            <!-- Conditional Fields -->
-                            <div id="maintenance-field" class="bg-red-50 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 rounded-xl p-4 hidden animate-fade-in-up">
-                                <label class="block text-xs font-bold text-red-500 dark:text-red-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                            <!-- Maintenance Cost (Lifestyle) -->
+                            <div id="maintenance-field" class="bg-red-500/8 border border-red-500/20 rounded-2xl p-5 hidden animate-fade-in-up">
+                                <label class="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-1 flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                    Custo de Manutenção
+                                    Custo de Manutenção Mensal
                                 </label>
-                                <p class="text-[11px] text-text-secondary_light dark:text-text-secondary_dark mb-3">Possuir este item vai aumentar seu custo fixo mensal em quanto?</p>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-red-500 dark:text-red-300 font-medium"></span>
-                                    <input type="text" name="maintenance_cost" data-currency="true" class="w-full bg-white dark:bg-red-500/10 rounded-lg border border-red-200 dark:border-red-500/20 p-3 text-text-primary_light dark:text-text-primary_dark focus:border-red-500 outline-none transition placeholder-red-300/30" placeholder="R$ 0,00">
-                                </div>
+                                <p class="text-[11px] text-brand-text-secondary mb-3 leading-relaxed">Possuir este item vai aumentar seu custo fixo mensal em quanto?</p>
+                                <input type="text" name="maintenance_cost" data-currency="true" class="w-full bg-brand-bg rounded-xl border border-red-500/30 p-4 text-brand-text-primary font-bold focus:border-red-500 focus:ring-1 focus:ring-red-500/30 outline-none transition-all placeholder:text-red-500/20" placeholder="R$ 0,00">
                             </div>
                             
-                            <!-- Extra padding for scroll safety: pb-32 to be extremely safe against bottom bars -->
                             <div class="pb-32 md:pb-10"></div>
                         </form>
                     </div>
 
                     <!-- Footer (Fixed) -->
-                    <div class="p-6 border-t border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark rounded-b-2xl shrink-0 safe-area-bottom z-10 relative">
-                        <button type="submit" form="add-goal-form" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition flex items-center justify-center gap-2 text-lg">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="add-goal-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-gold/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2">
                             <span>Criar Meta</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>
                         </button>
                     </div>
@@ -498,52 +484,50 @@ export const GoalsModule = {
 
             <!-- Contribute Modal -->
             <div id="contribute-modal" class="fixed inset-0 z-[100] hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-300" onclick="document.getElementById('contribute-modal').classList.add('hidden')"></div>
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md" onclick="document.getElementById('contribute-modal').classList.add('hidden')"></div>
                 
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-background-card_light dark:bg-background-card_dark rounded-t-2xl md:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl border-t md:border border-slate-200 dark:border-slate-700 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[400px] md:max-w-md animate-slide-up md:animate-scale-in">
-                    
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl max-h-[90vh] flex flex-col shadow-2xl md:border md:border-brand-border/60 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-auto md:min-w-[400px] md:max-w-md animate-slide-up md:animate-scale-in overflow-hidden">
+
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-green/50 to-transparent"></div>
+                    <div class="absolute -top-8 right-0 w-40 h-40 bg-brand-green/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile) -->
-                    <div class="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
 
                     <!-- Header -->
-                    <div class="p-6 pb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
-                         <h3 class="text-xl font-bold text-text-primary_light dark:text-text-primary_dark mb-1">Aporte de Meta</h3>
-                         <p class="text-sm text-text-secondary_light dark:text-text-secondary_dark truncate" id="contribute-goal-name">Guardando para o futuro...</p>
+                    <div class="px-6 py-4 border-b border-brand-border/50 shrink-0 relative z-10">
+                        <h3 class="text-lg font-black text-brand-text-primary tracking-tight">Aporte de Meta</h3>
+                        <p class="text-sm text-brand-text-secondary truncate mt-0.5" id="contribute-goal-name">Guardando para o futuro...</p>
                     </div>
                      
                     <!-- Body (Scrollable) -->
-                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1">
-                         <form id="contribute-form" class="space-y-5">
+                    <div class="p-6 overflow-y-auto custom-scrollbar flex-1 relative z-10">
+                        <form id="contribute-form" class="space-y-5">
                             <input type="hidden" name="goal_id" id="contribute-goal-id">
                             
-                            <div>
-                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Valor do Aporte</label>
-                                <div class="relative">
-                                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary_light dark:text-text-secondary_dark font-medium"></span>
-                                    <input type="text" name="amount" data-currency="true" required class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition placeholder-slate-400 font-bold text-lg" placeholder="R$ 0,00" autofocus>
-                                </div>
+                            <!-- Amount - large display -->
+                            <div class="bg-brand-bg rounded-2xl p-5 border border-brand-border/50">
+                                <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-2">Valor do Aporte</label>
+                                <input type="text" name="amount" data-currency="true" required class="w-full bg-transparent text-4xl font-black text-brand-text-primary border-0 p-0 focus:ring-0 outline-none placeholder:text-brand-text-secondary/25" placeholder="R$ 0,00" autofocus>
                             </div>
 
-                             <div>
-                                <label class="block text-xs font-bold text-text-secondary_light dark:text-text-secondary_dark uppercase tracking-wide mb-2 ml-1">Origem dos Fundos</label>
-                                <div class="relative">
-                                    <select name="source" class="w-full bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-4 text-text-primary_light dark:text-text-primary_dark focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition appearance-none cursor-pointer">
-                                        <option value="manual">📝 Apenas atualizar saldo (Sem transação)</option>
-                                        <option value="transaction" selected>🏦 Conta Principal (Criar Transação)</option>
-                                    </select>
-                                    <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-text-secondary_light dark:text-text-secondary_dark">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-                                    </div>
-                                </div>
+                            <!-- Source selector -->
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Origem dos Fundos</label>
+                                <select name="source" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold focus:border-brand-green focus:ring-1 focus:ring-brand-green/30 outline-none transition-all appearance-none bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
+                                    <option value="manual">📝 Apenas atualizar saldo (Sem transação)</option>
+                                    <option value="transaction" selected>🏦 Conta Principal (Criar Transação)</option>
+                                </select>
                             </div>
-                            <!-- Spacer for bottom safety -->
+
                             <div class="pb-6 md:pb-0"></div>
-                         </form>
+                        </form>
                     </div>
 
                     <!-- Footer -->
-                    <div class="p-6 border-t border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark rounded-b-2xl shrink-0">
-                        <button type="submit" form="contribute-form" class="w-full bg-brand-500 hover:bg-brand-600 text-white font-bold py-3.5 rounded-xl shadow-lg hover:shadow-xl active:scale-[0.98] transition">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 relative z-10">
+                        <button type="submit" form="contribute-form" class="w-full bg-brand-green hover:bg-emerald-400 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-green/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
                             Confirmar Aporte
                         </button>
                     </div>
@@ -555,10 +539,9 @@ export const GoalsModule = {
                 .animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; }
                 @keyframes scale-in { from { opacity: 0; transform: translate(-50%, -40%) scale(0.95); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
                 .animate-scale-in { animation: scale-in 0.2s ease-out forwards; }
-                /* Custom Scrollbar */
                 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
                 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.5); border-radius: 20px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.3); border-radius: 20px; }
             </style>
         `;
     },
@@ -635,20 +618,34 @@ export const GoalsModule = {
         const saveBtn = document.getElementById('save-budget-btn');
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
+                const originalText = saveBtn.innerHTML;
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+
                 // Recalculate total from current UI or filtered list
                 const currentAllocations = BudgetService.getAllocations(context);
                 const total = currentAllocations.reduce((acc, curr) => acc + curr.percentage, 0);
 
                 if (total !== 100) {
                     Toast.show(`A distribuição deve somar 100%. Atual: ${total}%`, 'warning');
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = originalText;
                     return;
                 }
 
-                // Batch save
-                for (const alloc of currentAllocations) {
-                    await BudgetService.save(alloc.category, alloc.percentage, context);
+                try {
+                    // Batch save
+                    for (const alloc of currentAllocations) {
+                        await BudgetService.save(alloc.category, alloc.percentage, context);
+                    }
+                    Toast.show('Orçamento salvo com sucesso!', 'success');
+                } catch (error) {
+                    console.error(error);
+                    Toast.show('Erro ao salvar orçamento', 'error');
+                } finally {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = originalText;
                 }
-                Toast.show('Orçamento salvo com sucesso!', 'success');
             });
         }
     },
@@ -704,6 +701,14 @@ export const GoalsModule = {
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+
+                const submitBtn = form.querySelector('button[type="submit"]') || document.querySelector('button[form="add-goal-form"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : 'Salvar';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+                }
+
                 const formData = new FormData(form);
 
                 const newGoal = {
@@ -749,6 +754,11 @@ export const GoalsModule = {
                 } catch (error) {
                     console.error(error);
                     Toast.show('Erro ao salvar meta: ' + error.message, 'error');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
                 }
             });
         }
@@ -758,6 +768,14 @@ export const GoalsModule = {
         if (contributeForm) {
             contributeForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
+
+                const submitBtn = contributeForm.querySelector('button[type="submit"]') || document.querySelector('button[form="contribute-form"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : 'Confirmar';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Processando...';
+                }
+
                 const formData = new FormData(contributeForm);
                 const goalId = formData.get('goal_id');
                 const rawAmount = formData.get('amount');
@@ -815,6 +833,11 @@ export const GoalsModule = {
                 } catch (error) {
                     console.error(error);
                     Toast.show('Erro ao processar aporte: ' + error.message, 'error');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
                 }
             });
         }

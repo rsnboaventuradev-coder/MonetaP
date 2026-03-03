@@ -164,9 +164,9 @@ export const AccountsService = {
         return transfer;
     },
 
-    getTotalBalance() {
+    getTotalBalance(includeAll = false) {
         return this.accounts
-            .filter(a => a.include_in_total)
+            .filter(a => includeAll || a.include_in_total)
             .reduce((sum, account) => sum + (account.current_balance || 0), 0);
     },
 

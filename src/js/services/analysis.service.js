@@ -1,5 +1,6 @@
 import { TransactionService } from './transaction.service.js';
 import { BudgetService } from './budget.service.js';
+import { SupabaseService } from './supabase.service.js';
 
 /**
  * Serviço de Análise Financeira.
@@ -64,6 +65,89 @@ export const AnalysisService = {
         if (rate >= 10) return { label: 'Bom', color: 'text-blue-500' };
         if (rate > 0) return { label: 'Atenção', color: 'text-yellow-500' };
         return { label: 'Crítico', color: 'text-red-500' };
+    },
+
+    /**
+     * Recupera a análise qualitativa (Diagrama do Cerrado) de um ativo específico.
+     * @param {string} investmentId UUID do investimento
+     * @returns {Promise<Object>} Dados da análise ou null se não houver
+     */
+    async getAnalysis(investmentId) {
+        try {
+            const { data: { session } } = await SupabaseService.client.auth.getSession();
+            if (!session) return null;
+
+            const { data, error } = await SupabaseService.client
+                .from('asset_analysis')
+                .select('*')
+                .eq('investment_id', investmentId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+                console.error('Erro ao recuparar análise do ativo:', error.message);
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('Exception no getAnalysis:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Salva (Insere ou Atualiza) a análise qualitativa de um ativo.
+     * @param {string} investmentId UUID do ativo
+     * @param {Object} scores Objeto com os 10 critérios
+     */
+    async saveAnalysis(investmentId, scores) {
+        try {
+            const { data: { session } } = await SupabaseService.client.auth.getSession();
+            if (!session) throw new Error('Usuário não autenticado.');
+
+            // Verifica se a análise já existe para fazer Upsert/Update seguro (dependendo da PK/Unique)
+            const { data: existing } = await SupabaseService.client
+                .from('asset_analysis')
+                .select('id')
+                .eq('investment_id', investmentId)
+                .single();
+
+            const payload = {
+                user_id: session.user.id,
+                investment_id: investmentId,
+                profitability: scores.profitability,
+                perenniality: scores.perenniality,
+                management: scores.management,
+                debt: scores.debt,
+                moat: scores.moat,
+                roe: scores.roe,
+                cash_flow: scores.cash_flow,
+                dividends: scores.dividends,
+                governance: scores.governance,
+                valuation: scores.valuation,
+                updated_at: new Date().toISOString()
+            };
+
+            let result;
+            if (existing && existing.id) {
+                // Update
+                result = await SupabaseService.client
+                    .from('asset_analysis')
+                    .update(payload)
+                    .eq('id', existing.id);
+            } else {
+                // Insert
+                result = await SupabaseService.client
+                    .from('asset_analysis')
+                    .insert([payload]);
+            }
+
+            if (result.error) throw result.error;
+            return true;
+        } catch (error) {
+            console.error('Erro ao salvar análise do ativo:', error.message);
+            throw error;
+        }
     }
 };
 

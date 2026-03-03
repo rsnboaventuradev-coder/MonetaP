@@ -17,9 +17,8 @@ export const InvestmentsService = {
         return this.store.value.reduce((acc, inv) => {
             const price = inv.current_price || 0;
             const qtd = inv.quantity || 0;
-            // storing as integer cents, so need to divide by 100 for display, 
-            // but let's keep it consistent. If stored as 1050 (10.50), then (1050 * qtd) / 100 = value.
-            return acc + ((price * qtd) / 100);
+            // Storing as integer cents. Result is cents.
+            return acc + (price * qtd);
         }, 0);
     },
 

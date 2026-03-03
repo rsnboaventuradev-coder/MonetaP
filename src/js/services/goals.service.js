@@ -341,17 +341,46 @@ export const GoalsService = {
     },
 
     /**
-     * PJ Budget Stubs (required by App/Dashboard)
+     * PJ Budget logic (required by App/Dashboard)
      */
     getPJBudget() {
+        const transactions = window.app?.TransactionService?.transactions || [];
+        const businessTxs = transactions.filter(t => t.context === 'business');
+        
+        const revenues = businessTxs.filter(t => t.type === 'income');
+        const expenses = businessTxs.filter(t => t.type === 'expense');
+
+        const groupedExpenses = {
+            fixed_costs: expenses.filter(t => t.classification === 'fixed_operational' || t.category_name?.includes('Custos Operacionais')),
+            taxes: expenses.filter(t => t.category_name?.includes('Impostos')),
+            personnel: expenses.filter(t => t.category_name?.includes('Equipe') || t.classification === 'pro_labore'),
+            others: expenses.filter(t => !t.classification && !t.category_name?.includes('Custos') && !t.category_name?.includes('Impostos') && !t.category_name?.includes('Equipe'))
+        };
+
         return {
-            revenues: [],
-            expenses: { fixed_costs: [], taxes: [], personnel: [] }
+            revenues,
+            expenses: groupedExpenses
         };
     },
 
     calculatePJDRE() {
-        return { expenses: 0, profit: 0, margin: 0 };
+        const budget = this.getPJBudget();
+        const totalRevenue = budget.revenues.reduce((acc, t) => acc + parseInt(t.amount || 0), 0);
+        
+        let totalExpenses = 0;
+        Object.values(budget.expenses).forEach(list => {
+            totalExpenses += list.reduce((acc, t) => acc + Math.abs(parseInt(t.amount || 0)), 0);
+        });
+
+        const profit = totalRevenue - totalExpenses;
+        const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+        return { 
+            revenue: totalRevenue,
+            expenses: totalExpenses, 
+            profit: profit, 
+            margin: parseFloat(margin.toFixed(2)) 
+        };
     },
 
     async createPJBudgetTemplate() {

@@ -588,6 +588,76 @@ export const InvestmentsModule = {
         if (closeBtn) closeBtn.addEventListener('click', closeModal);
         if (overlay) overlay.addEventListener('click', closeModal);
 
+        // --- NEW: Auto-fill Market Data via Brapi ---
+        const tickerInput = document.querySelector('input[name="ticker"]');
+        if (tickerInput) {
+            tickerInput.addEventListener('blur', async (e) => {
+                const typeVal = document.getElementById('asset-type-select')?.value;
+                // Only auto-fill for variable income (stocks & FIIs)
+                if (!['stock', 'fii'].includes(typeVal)) return;
+
+                const ticker = e.target.value.trim().toUpperCase();
+                if (!ticker) return;
+
+                const nameInput = document.querySelector('input[name="name"]');
+                const priceInput = document.querySelector('input[name="current_price"]');
+                const sectorInput = document.querySelector('input[name="sector"]');
+
+                // Visual Feedback
+                const originalNamePlaceholder = nameInput ? nameInput.placeholder : '';
+                if (nameInput) nameInput.placeholder = 'Buscando dados na B3...';
+                if (tickerInput) tickerInput.disabled = true;
+
+                try {
+                    // Using StatusInvest via CORS Proxies as open alternatives since Brapi blocks some tickers
+                    const targetUrl = encodeURIComponent(`https://statusinvest.com.br/home/mainsearchquery?q=${ticker}`);
+                    const proxies = [
+                        `https://api.allorigins.win/raw?url=${targetUrl}`,
+                        `https://corsproxy.io/?${targetUrl}`
+                    ];
+
+                    let data = null;
+                    for (const proxyUrl of proxies) {
+                        try {
+                            const response = await fetch(proxyUrl);
+                            if (response.ok) {
+                                data = await response.json();
+                                break; // Success, exit the fallback loop
+                            }
+                        } catch (e) {
+                            console.warn(`Proxy falhou: ${proxyUrl}`, e);
+                        }
+                    }
+
+                    if (data && Array.isArray(data) && data.length > 0) {
+                        const asset = data[0];
+
+                        // Set Name (Format from StatusInvest: "ABCB4 - BANCO ABC BRASIL")
+                        if (nameInput && !nameInput.value) {
+                            const fullName = asset.nameFormated || '';
+                            const parts = fullName.split(' - ');
+                            nameInput.value = parts.length > 1 ? parts[1].trim() : fullName;
+                        }
+
+                        // Set Price (Format from StatusInvest is localized string: "27,89")
+                        if (priceInput && asset.price && !priceInput.value) {
+                            priceInput.value = `R$ ${asset.price}`;
+                        }
+
+                        Toast.show(`Dados de ${ticker} encontrados!`, 'success');
+                    } else {
+                        Toast.show(`Ativo ${ticker} não encontrado nas consultas ou erro de rede.`, 'warning');
+                    }
+                } catch (error) {
+                    console.error('Fetch StatusInvest error:', error);
+                    Toast.show('Falha crítica ao buscar dados na bolsa.', 'error');
+                } finally {
+                    if (nameInput) nameInput.placeholder = originalNamePlaceholder;
+                    if (tickerInput) tickerInput.disabled = false;
+                }
+            });
+        }
+
         // Helper for listener
         const typeSelect = document.getElementById('asset-type-select');
         if (typeSelect) {
@@ -640,12 +710,20 @@ export const InvestmentsModule = {
         if (form) {
             form.onsubmit = async (e) => {
                 e.preventDefault();
+
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : 'Salvar';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+                }
+
                 const formData = new FormData(form);
                 const assetData = Object.fromEntries(formData.entries());
                 const id = assetData.id;
                 delete assetData.id;
 
-                const currencyFields = ['average_price', 'current_price', 'principal_amount', 'current_value', 'initial_balance'];
+                const currencyFields = ['average_price', 'current_price', 'principal_amount', 'current_value'];
 
                 // Parse standard numeric fields
                 ['quantity', 'rate', 'dividend_yield', 'p_vp'].forEach(field => {
@@ -662,6 +740,13 @@ export const InvestmentsModule = {
                         // Unmask returns float (Reais) for Service to handle conversion
                         assetData[field] = CurrencyMask.unmaskToFloat(assetData[field]);
                     } else {
+                        assetData[field] = null;
+                    }
+                });
+
+                // Parse Date Fields (Prevent empty string from breaking Supabase date type)
+                ['application_date', 'maturity_date'].forEach(field => {
+                    if (assetData[field] === '') {
                         assetData[field] = null;
                     }
                 });
@@ -705,6 +790,11 @@ export const InvestmentsModule = {
                 } catch (error) {
                     console.error(error);
                     Toast.show('Erro ao salvar investimento: ' + error.message, 'error');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
                 }
             };
         }
@@ -810,6 +900,14 @@ export const InvestmentsModule = {
         if (accountForm) {
             accountForm.onsubmit = async (e) => {
                 e.preventDefault();
+
+                const submitBtn = accountForm.querySelector('button[type="submit"]');
+                const originalText = submitBtn ? submitBtn.innerHTML : 'Salvar';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+                }
+
                 const formData = new FormData(accountForm);
 
                 // Parse initial_balance
@@ -842,6 +940,11 @@ export const InvestmentsModule = {
                 } catch (error) {
                     console.error(error);
                     Toast.show('Erro ao salvar conta: ' + error.message, 'error');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalText;
+                    }
                 }
             };
         }
@@ -1134,49 +1237,66 @@ export const InvestmentsModule = {
         ];
 
         return `
-            <div id="analysis-modal" class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center animate-fade-in">
-                <div class="absolute inset-0 bg-brand-bg/95 backdrop-blur-md" id="close-analysis-overlay"></div>
-                <div class="relative bg-brand-surface border border-brand-border rounded-t-[2.5rem] sm:rounded-3xl p-6 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div id="analysis-modal" class="fixed inset-0 z-[60] flex items-end sm:items-center justify-center animate-fade-in hidden">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300" id="close-analysis-overlay"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl shadow-2xl md:border md:border-brand-border/60 flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:min-w-[450px] md:h-auto max-h-[90vh] animate-slide-up md:animate-scale-in overflow-hidden">
                     
-                    <div class="flex justify-between items-center mb-6 shrink-0">
-                         <div>
-                            <p class="text-[10px] text-brand-gold uppercase tracking-widest font-bold">Diagrama do Cerrado</p>
-                            <h3 class="text-xl font-bold text-brand-text-primary">${name}</h3>
-                         </div>
-                         <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-analysis-btn">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+
+                    <!-- Drag Handle (Mobile Only) -->
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    
+                    <!-- Header -->
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
+                        <div>
+                            <p class="text-[10px] text-brand-gold uppercase tracking-widest font-black opacity-70 mb-0.5">Diagrama do Cerrado</p>
+                            <h3 class="text-lg font-black text-brand-text-primary tracking-tight">Analisando Ativo</h3>
+                        </div>
+                        <button class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90" id="close-analysis-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
                         </button>
                     </div>
 
-                    <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                    <!-- Body -->
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10">
                         <!-- Chart Area -->
-                        <div class="h-64 relative bg-black/20 rounded-2xl p-2 border border-brand-border">
+                        <div class="h-64 relative bg-brand-bg rounded-2xl p-2 border border-brand-border/50">
                             <canvas id="analysis-radar-chart"></canvas>
                         </div>
 
                         <!-- Form Area -->
-                        <form id="analysis-form" class="space-y-5 pb-4">
+                        <form id="analysis-form" class="space-y-5">
                             ${criteria.map(c => `
                                 <div>
                                     <div class="flex justify-between items-center mb-2">
                                         <div>
-                                            <label class="block text-xs font-bold text-brand-text-primary">${c.label}</label>
-                                            <p class="text-[9px] text-brand-text-secondary">${c.desc}</p>
+                                            <label class="block text-xs font-black text-brand-text-primary uppercase tracking-wider">${c.label}</label>
+                                            <p class="text-[10px] text-brand-text-secondary opacity-70">${c.desc}</p>
                                         </div>
-                                        <div class="value-bubble w-6 h-6 rounded-full bg-brand-gold text-brand-darker font-bold text-[10px] flex items-center justify-center">0</div>
+                                        <div class="value-bubble w-6 h-6 rounded-full bg-brand-gold text-brand-darker font-black text-[10px] flex items-center justify-center shadow-lg shadow-brand-gold/20">0</div>
                                     </div>
-                                    <input type="range" name="${c.id}" min="0" max="5" value="0" step="1" class="w-full h-1 bg-brand-surface-light rounded-lg appearance-none cursor-pointer accent-brand-gold">
-                                    <div class="flex justify-between text-[8px] text-brand-text-secondary font-bold uppercase mt-1">
+                                    <input type="range" name="${c.id}" min="0" max="5" value="0" step="1" class="w-full h-1 bg-brand-bg rounded-lg appearance-none cursor-pointer accent-brand-gold border border-brand-border/20">
+                                    <div class="flex justify-between text-[8px] text-brand-text-secondary font-black uppercase tracking-widest mt-1.5 opacity-60">
                                         <span>Ruim</span>
                                         <span>Excelente</span>
                                     </div>
                                 </div>
                             `).join('')}
                             
-                            <button type="submit" class="w-full bg-brand-gold text-brand-darker font-bold py-3 rounded-xl shadow-lg shadow-brand-gold/20 sticky bottom-0">
-                                Salvar Análise
-                            </button>
+                            <!-- Spacer -->
+                            <div class="pb-32 md:pb-6"></div>
                         </form>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative">
+                        <button type="submit" form="analysis-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-gold/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2">
+                            Salvar Análise
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1262,18 +1382,23 @@ export const InvestmentsModule = {
     renderModal() {
         return `
             <div id="asset-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md transition-opacity duration-300" id="close-asset-overlay"></div>
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300" id="close-asset-overlay"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl shadow-2xl md:border md:border-brand-border/60 flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[500px] md:h-auto max-h-[90vh] animate-slide-up md:animate-scale-in overflow-hidden">
                     
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile Only) -->
-                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
                     
-                    <!-- Header (Fixed) -->
-                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
-                        <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
-                             📈 Novo Ativo
-                        </h3>
-                        <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-asset-btn">
+                    <!-- Header -->
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
+                        <div>
+                            <h3 class="text-lg font-black text-brand-text-primary tracking-tight flex items-center gap-2">📈 Novo Ativo</h3>
+                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest opacity-70 mt-0.5">Adicione um novo investimento</p>
+                        </div>
+                        <button class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90" id="close-asset-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
@@ -1281,12 +1406,12 @@ export const InvestmentsModule = {
                     </div>
 
                     <!-- Body (Scrollable) -->
-                    <form id="asset-form" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                    <form id="asset-form" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10">
                         <input type="hidden" name="id" id="asset-id">
                         
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Tipo de Ativo</label>
-                            <select name="type" id="asset-type-select" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white appearance-none font-bold">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Tipo de Ativo</label>
+                            <select name="type" id="asset-type-select" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
                                 <option value="stock">Ação</option>
                                 <option value="fii">Fundo Imobiliário (FII)</option>
                                 <option value="fixed_income">Renda Fixa (CDB/LCI/LCA)</option>
@@ -1296,146 +1421,137 @@ export const InvestmentsModule = {
                         </div>
 
                         <!-- Common Fields -->
-                        <div id="ticker-field">
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Ticker / Símbolo</label>
-                            <input type="text" name="ticker" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white uppercase placeholder-gray-600 font-bold" placeholder="EX: BTC, ETH">
+                        <div id="ticker-field" class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Ticker / Símbolo</label>
+                            <input type="text" name="ticker" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30 uppercase" placeholder="EX: BTC, ETH, PETR4">
                         </div>
                         
-                        <div id="name-field">
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Nome do Ativo</label>
-                            <input type="text" name="name" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Bitcoin">
+                        <div id="name-field" class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Nome do Ativo</label>
+                            <input type="text" name="name" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Bitcoin, Nubank">
                         </div>
 
                         <!-- Fixed Income Specifics -->
-                        <div id="fixed-income-fields" class="hidden space-y-4 border-l-2 border-brand-gold/30 pl-4 my-2">
-                             <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">Emissor / Instituição</label>
-                                <input type="text" name="issuer" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: Banco Inter, Nubank, Tesouro Nacional">
+                        <div id="fixed-income-fields" class="hidden space-y-6 border-l-2 border-brand-gold/30 pl-4 py-2">
+                             <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Emissor / Instituição</label>
+                                <input type="text" name="issuer" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Banco Inter, Nubank">
                             </div>
 
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">💰 Valor Aplicado (Principal)</label>
-                                <input type="text" name="principal_amount" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
-                                <p class="text-[10px] text-brand-text-secondary mt-1">Montante inicial investido</p>
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Valor Aplicado (Principal)</label>
+                                <input type="text" name="principal_amount" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                             </div>
 
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">📅 Data da Aplicação</label>
-                                <input type="date" name="application_date" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white [color-scheme:dark]">
-                                <p class="text-[10px] text-brand-text-secondary mt-1">Fundamental para cálculo de IR e tempo de permanência</p>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Data de Aplicação</label>
+                                    <input type="date" name="application_date" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all [color-scheme:dark]">
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Vencimento (Opcional)</label>
+                                    <input type="date" name="maturity_date" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all [color-scheme:dark]">
+                                </div>
                             </div>
 
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">📊 Tipo de Rentabilidade</label>
-                                <select name="indexer" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white appearance-none">
-                                    <option value="CDI">Pós-fixado (% do CDI)</option>
-                                    <option value="IPCA">Híbrido (IPCA + %)</option>
-                                    <option value="PRE">Pré-fixado (% a.a.)</option>
-                                    <option value="SELIC">Selic</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">Taxa (%)</label>
-                                <input type="number" step="0.01" name="rate" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: 105 para 105% CDI ou 12 para 12% a.a.">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Tipo de Rentabilidade</label>
+                                    <select name="indexer" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
+                                        <option value="CDI">Pós (CDI)</option>
+                                        <option value="IPCA">Híbrido (IPCA+)</option>
+                                        <option value="PRE">Pré-fixado</option>
+                                        <option value="SELIC">Selic</option>
+                                    </select>
+                                </div>
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Taxa (%)</label>
+                                    <input type="number" step="0.01" name="rate" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: 105">
+                                </div>
                             </div>
                             
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">📆 Vencimento <span class="text-brand-text-secondary font-normal">(Opcional)</span></label>
-                                <input type="date" name="maturity_date" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white [color-scheme:dark]">
-                                <p class="text-[10px] text-brand-text-secondary mt-1">Data em que o título expira</p>
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">💧 Liquidez</label>
-                                <select name="liquidity" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white appearance-none">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Liquidez</label>
+                                <select name="liquidity" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
                                     <option value="daily">Liquidez Diária (D+0/D+1)</option>
                                     <option value="maturity">Apenas no Vencimento</option>
                                     <option value="d30">D+30 ou mais</option>
                                 </select>
-                                <p class="text-[10px] text-brand-text-secondary mt-1">Quando você pode resgatar o investimento</p>
                             </div>
 
-                            <div>
-                                <label class="block text-xs font-bold text-brand-gold uppercase tracking-widest mb-2">💵 Valor Atual (Atualizado)</label>
-                                <input type="text" name="current_value" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
-                                <p class="text-[10px] text-brand-text-secondary mt-1">Atualize periodicamente para acompanhar rendimentos</p>
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-gold z-10">Valor Atual (Bruto)</label>
+                                <input type="text" name="current_value" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                             </div>
 
-
-
-                            <div class="flex items-center gap-3 bg-blue-500/10 p-4 rounded-xl border border-blue-500/20 mt-2">
-                                <input type="checkbox" name="is_emergency_fund" id="investment-emergency-fund" class="w-5 h-5 rounded accent-blue-500">
-                                <label for="investment-emergency-fund" class="text-sm text-brand-text-secondary">
-                                    🛡️ Este investimento faz parte da minha <span class="text-blue-400 font-bold">Reserva de Emergência</span>
-                                </label>
-                            </div>
+                            <label class="flex items-center gap-3 bg-blue-500/10 p-4 rounded-2xl cursor-pointer border border-blue-500/20 hover:border-blue-500/40 transition-all">
+                                <input type="checkbox" name="is_emergency_fund" id="investment-emergency-fund" class="w-5 h-5 rounded accent-blue-500 flex-shrink-0">
+                                <span class="text-sm font-bold text-blue-400">🛡️ Compõe a Reserva de Emergência</span>
+                            </label>
                         </div>
 
                         <!-- Variable Income Specifics -->
-                        <div id="variable-income-fields" class="hidden space-y-4 border-l-2 border-blue-500/30 pl-4 my-2">
-                             <div>
-                                <label class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Setor</label>
-                                <input type="text" name="sector" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: Bancário, Energia">
+                        <div id="variable-income-fields" class="hidden space-y-6 border-l-2 border-blue-500/30 pl-4 py-2">
+                             <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-blue-400 z-10">Setor</label>
+                                <input type="text" name="sector" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Bancário, Energia">
                             </div>
 
                              <div class="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Dividend Yield (%)</label>
-                                    <input type="number" step="0.01" name="dividend_yield" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: 8.5">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-blue-400 z-10">Dividend Yield (%)</label>
+                                    <input type="number" step="0.01" name="dividend_yield" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: 8.5">
                                 </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">P/VP</label>
-                                    <input type="number" step="0.01" name="p_vp" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: 1.05">
+                                <div class="relative">
+                                    <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-blue-400 z-10">P/VP</label>
+                                    <input type="number" step="0.01" name="p_vp" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: 1.05">
                                 </div>
                             </div>
                         </div>
 
                          <!-- Crypto Specifics -->
-                        <div id="crypto-fields" class="hidden space-y-4 border-l-2 border-purple-500/30 pl-4 my-2">
-                             <div>
-                                <label class="block text-xs font-bold text-purple-400 uppercase tracking-widest mb-2">Exchange / Wallet (Custódia)</label>
-                                <input type="text" name="crypto_issuer" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="Ex: Binance, Ledger">
+                        <div id="crypto-fields" class="hidden border-l-2 border-purple-500/30 pl-4 py-2">
+                             <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-purple-400 z-10">Exchange / Wallet</label>
+                                <input type="text" name="crypto_issuer" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Binance, Ledger">
                             </div>
                         </div>
 
                         <!-- Values -->
                         <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-green-500 uppercase tracking-widest mb-2">Quantidade</label>
-                                <input type="number" step="any" name="quantity" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="0">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-emerald-500 z-10">Quantidade</label>
+                                <input type="number" step="any" name="quantity" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="0">
                             </div>
-                            <div>
-                                <label class="block text-xs font-bold text-blue-500 uppercase tracking-widest mb-2">Preço Médio</label>
-                                <input type="text" name="average_price" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-blue-500 z-10">Preço Médio</label>
+                                <input type="text" name="average_price" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                             </div>
                         </div>
 
-                        <div>
-                             <label class="block text-xs font-bold text-brand-text-primary uppercase tracking-widest mb-2">Cotação Atual (R$)</label>
-                             <input type="text" name="current_price" data-currency="true" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-600" placeholder="R$ 0,00">
-                             <p class="text-[10px] text-brand-text-secondary mt-1">Atualize manualmente.</p>
+                        <div class="relative">
+                             <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-primary z-10">Cotação Atual (R$)</label>
+                             <input type="text" name="current_price" data-currency="true" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="R$ 0,00">
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-widest mb-2">Classificação</label>
-                            <select name="entity_context" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Classificação</label>
+                            <select name="entity_context" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
                                 <option value="personal">👤 Pessoal (PF)</option>
                                 <option value="business">💼 Empresa (PJ)</option>
                             </select>
-                            <p class="text-[10px] text-brand-text-secondary mt-1">Separe investimentos pessoais e empresariais</p>
                         </div>
 
                         <!-- Spacer for safe area -->
-                        <div class="pb-32 md:pb-0"></div>
+                        <div class="pb-32 md:pb-6"></div>
                     </form>
 
                     <!-- Footer -->
-                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative space-y-3">
-                        <button type="submit" form="asset-form" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-brand-darker font-bold py-4 rounded-2xl transition shadow-lg shadow-brand-gold/10">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative flex flex-col gap-3">
+                        <button type="submit" form="asset-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-gold/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2">
                             Salvar Ativo
                         </button>
-                         <button type="button" id="btn-delete-asset" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition hover:bg-red-500/20">
+                         <button type="button" id="btn-delete-asset" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-2xl shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
                             Excluir Ativo
                         </button>
                     </div>
@@ -1447,18 +1563,23 @@ export const InvestmentsModule = {
     renderAccountModal() {
         return `
             <div id="account-modal" class="fixed inset-0 hidden" style="z-index: 9999;">
-                <div class="absolute inset-0 bg-brand-bg/90 backdrop-blur-md" id="close-account-overlay"></div>
-                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border rounded-t-2xl md:rounded-2xl md:border p-0 shadow-2xl max-h-[90vh] flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl md:min-w-[600px] md:h-auto animate-slide-up md:animate-scale-in">
+                <div class="absolute inset-0 bg-black/75 backdrop-blur-md transition-opacity duration-300" id="close-account-overlay"></div>
+                <div class="fixed bottom-0 left-0 right-0 w-full bg-brand-surface border-t border-brand-border/50 rounded-t-[2rem] md:rounded-3xl shadow-2xl md:border md:border-brand-border/60 flex flex-col md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-xl md:min-w-[500px] md:h-auto max-h-[90vh] animate-slide-up md:animate-scale-in overflow-hidden">
                     
+                    <!-- Decorative accent -->
+                    <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent"></div>
+                    <div class="absolute -top-10 right-0 w-48 h-48 bg-brand-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+
                     <!-- Drag Handle (Mobile Only) -->
-                    <div class="w-12 h-1.5 bg-brand-surface-light rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
+                    <div class="w-10 h-1 bg-brand-border rounded-full mx-auto mt-3 mb-1 shrink-0 md:hidden"></div>
                     
                     <!-- Header -->
-                    <div class="p-6 pb-4 border-b border-brand-border flex justify-between items-center shrink-0">
-                        <h3 class="text-xl font-bold text-brand-text-primary flex items-center gap-2">
-                             💳 Nova Conta
-                        </h3>
-                        <button class="bg-brand-surface-light rounded-full p-2 text-brand-text-secondary hover:text-brand-text-primary transition" id="close-account-btn">
+                    <div class="px-6 py-4 border-b border-brand-border/50 flex justify-between items-center shrink-0 relative z-10">
+                        <div>
+                            <h3 class="text-lg font-black text-brand-text-primary tracking-tight flex items-center gap-2">💳 Nova Conta</h3>
+                            <p class="text-[10px] text-brand-text-secondary uppercase tracking-widest opacity-70 mt-0.5">Adicione uma nova fonte financeira</p>
+                        </div>
+                        <button class="bg-brand-surface-light hover:bg-brand-border rounded-xl p-2.5 text-brand-text-secondary hover:text-brand-text-primary transition-all active:scale-90" id="close-account-btn">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                             </svg>
@@ -1466,78 +1587,80 @@ export const InvestmentsModule = {
                     </div>
 
                     <!-- Body -->
-                    <form id="account-form" class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                    <form id="account-form" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar relative z-10">
                         <input type="hidden" name="id" id="account-id">
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Nome da Conta</label>
-                            <input type="text" name="name" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-500" placeholder="Ex: Nubank, Dinheiro, PicPay">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Nome da Conta</label>
+                            <input type="text" name="name" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Nubank, Dinheiro, PicPay">
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Tipo</label>
-                            <select name="type" required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white">
-                                <option value="checking">💳 Conta Corrente</option>
-                                <option value="savings">🏦 Poupança</option>
-                                <option value="wallet">📱 Carteira Digital</option>
-                                <option value="cash">💵 Dinheiro</option>
-                                <option value="investment">📈 Investimentos</option>
-                                <option value="credit">💎 Cartão de Crédito</option>
-                            </select>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Tipo</label>
+                                <select name="type" required class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
+                                    <option value="checking">💳 Corrente</option>
+                                    <option value="savings">🏦 Poupança</option>
+                                    <option value="wallet">📱 Digital</option>
+                                    <option value="cash">💵 Dinheiro</option>
+                                    <option value="investment">📈 Invest</option>
+                                    <option value="credit">💎 Crédito</option>
+                                </select>
+                            </div>
+
+                            <div class="relative">
+                                <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Ícone (Emoji)</label>
+                                <input type="text" name="icon" maxlength="2" class="w-full h-[54px] bg-brand-bg rounded-2xl border border-brand-border px-4 text-white text-center text-xl focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all" placeholder="💳">
+                            </div>
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Instituição (Opcional)</label>
-                            <input type="text" name="institution" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-500" placeholder="Ex: Nubank, Banco do Brasil">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Instituição (Opcional)</label>
+                            <input type="text" name="institution" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all placeholder:text-brand-text-secondary/30" placeholder="Ex: Nubank, Banco do Brasil">
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Saldo Inicial</label>
-                            <input type="text" inputmode="numeric" name="initial_balance" data-currency required class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white placeholder-gray-500" placeholder="R$ 0,00">
-                            <p class="text-[10px] text-brand-text-secondary mt-1">Saldo que você já possui nesta conta</p>
+                        <div class="bg-brand-bg rounded-2xl p-5 border border-brand-border/50">
+                            <label class="block text-[10px] font-black text-brand-text-secondary uppercase tracking-widest mb-2">Saldo Inicial</label>
+                            <input type="text" inputmode="numeric" name="initial_balance" data-currency="true" required class="w-full bg-transparent text-4xl leading-none font-black text-brand-text-primary border-0 p-0 focus:ring-0 outline-none placeholder:text-brand-text-secondary/25" placeholder="R$ 0,00">
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Cor</label>
-                            <input type="color" name="color" value="#3B82F6" class="w-full h-12 bg-[#27272a] rounded-xl border border-brand-border cursor-pointer">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Cor Temática</label>
+                            <div class="flex items-center bg-brand-bg rounded-2xl border border-brand-border p-2 focus-within:border-brand-gold transition-all">
+                                <input type="color" name="color" value="#3B82F6" class="w-full h-10 bg-transparent rounded-xl cursor-pointer border-0 p-0 shadow-none">
+                            </div>
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Ícone (Emoji)</label>
-                            <input type="text" name="icon" maxlength="2" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white text-center text-2xl" placeholder="💳">
-                        </div>
+                        <div class="space-y-3">
+                            <label class="flex items-center gap-3 bg-brand-surface-light p-4 rounded-2xl cursor-pointer border border-brand-border/50 hover:border-brand-gold/30 transition-all">
+                                <input type="checkbox" name="include_in_total" id="include-total" checked class="w-5 h-5 rounded accent-brand-gold flex-shrink-0">
+                                <span class="text-sm font-bold text-brand-text-primary">Incluir no patrimônio total</span>
+                            </label>
 
-                        <div class="flex items-center gap-3 bg-brand-surface-light p-3 rounded-xl">
-                            <input type="checkbox" name="include_in_total" id="include-total" checked class="w-5 h-5 rounded accent-brand-gold">
-                            <label for="include-total" class="text-sm text-brand-text-secondary">Incluir no patrimônio total</label>
-                        </div>
-
-                        <div class="flex items-center gap-3 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20">
-                            <input type="checkbox" name="is_emergency_fund" id="emergency-fund-toggle" class="w-5 h-5 rounded accent-blue-500">
-                            <label for="emergency-fund-toggle" class="text-sm text-brand-text-secondary">
-                                🛡️ Esta conta faz parte da minha Reserva de Emergência
+                            <label class="flex items-center gap-3 bg-blue-500/10 p-4 rounded-2xl cursor-pointer border border-blue-500/20 hover:border-blue-500/40 transition-all">
+                                <input type="checkbox" name="is_emergency_fund" id="emergency-fund-toggle" class="w-5 h-5 rounded accent-blue-500 flex-shrink-0">
+                                <span class="text-sm font-bold text-blue-400">🛡️ Faz parte da Reserva de Emergência</span>
                             </label>
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold text-brand-text-secondary uppercase tracking-wide mb-2">Classificação</label>
-                            <select name="context" class="w-full bg-[#27272a] rounded-xl border border-brand-border p-3 text-white">
+                        <div class="relative">
+                            <label class="absolute -top-2 left-3 bg-brand-surface px-1 text-[10px] uppercase tracking-wider font-black text-brand-text-secondary z-10">Classificação</label>
+                            <select name="context" class="w-full bg-brand-bg rounded-2xl border border-brand-border p-4 text-brand-text-primary font-bold text-sm focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/30 outline-none transition-all appearance-none cursor-pointer bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M7%2010L12%2015L17%2010%22%20stroke%3D%22%239CA3AF%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[position:calc(100%-1rem)_center] bg-no-repeat pr-10">
                                 <option value="personal">👤 Pessoal (PF)</option>
                                 <option value="business">💼 Empresa (PJ)</option>
                             </select>
-                            <p class="text-[10px] text-brand-text-secondary mt-1">Separe contas pessoais e empresariais</p>
                         </div>
                         
                         <!-- Spacer -->
-                        <div class="pb-32 md:pb-0"></div>
+                        <div class="pb-32 md:pb-6"></div>
                     </form>
                     
                     <!-- Footer -->
-                    <div class="p-6 border-t border-brand-border bg-brand-surface rounded-b-2xl shrink-0 safe-area-bottom z-10 relative space-y-3">
-                        <button type="submit" form="account-form" class="w-full bg-gradient-to-r from-brand-gold to-yellow-600 text-brand-darker font-bold py-4 rounded-2xl transition shadow-lg">
+                    <div class="p-5 border-t border-brand-border/50 bg-brand-surface rounded-b-3xl shrink-0 safe-area-bottom z-10 relative flex flex-col gap-3">
+                        <button type="submit" form="account-form" class="w-full bg-brand-gold hover:bg-yellow-500 text-brand-darker font-black py-4 rounded-2xl shadow-xl shadow-brand-gold/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest flex items-center justify-center gap-2">
                             Salvar Conta
                         </button>
-                        <button type="button" id="btn-delete-account" class="hidden w-full bg-red-500/10 text-red-500 font-bold py-3 rounded-2xl transition hover:bg-red-500/20">
+                        <button type="button" id="btn-delete-account" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-black py-3 rounded-2xl shadow-lg shadow-red-500/25 active:scale-[0.98] transition-all text-sm uppercase tracking-widest">
                             Excluir Conta
                         </button>
                     </div>
